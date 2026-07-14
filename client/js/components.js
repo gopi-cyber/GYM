@@ -824,20 +824,11 @@ export function renderDashboard(user, onNavigate) {
   header.style.padding = '24px';
   header.style.marginBottom = '30px';
   
-  let badgeClass = 'badge-customer';
-  if (user.role === 'Owner') badgeClass = 'badge-owner';
-  else if (user.role === 'Trainer') badgeClass = 'badge-trainer';
-
   header.innerHTML = `
     <div class="dashboard-title">
-      <h1>Welcome back, ${user.name}</h1>
-      <p>Logged in as: <span class="role-badge ${badgeClass}">${user.role}</span></p>
-    </div>
-    <div>
-      <button class="btn-secondary" id="dash-logout">Logout</button>
+      <h1>${user.name}</h1>
     </div>
   `;
-  header.querySelector('#dash-logout').addEventListener('click', () => onSignOut());
   container.appendChild(header);
 
   // Render role specific views
