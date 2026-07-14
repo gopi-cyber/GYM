@@ -50,7 +50,7 @@ function navigate(route, authMode = 'login') {
 
   // Main Page wrapper container
   const pageContent = document.createElement('div');
-  pageContent.className = 'page-container';
+  pageContent.className = route === 'dashboard' || route === 'auth' ? 'dashboard-page' : 'public-page';
   appRoot.appendChild(pageContent);
 
   // Route Selection

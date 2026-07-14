@@ -243,14 +243,15 @@ export async function login(email, password) {
   return uiUser;
 }
 
-// role should be 'Customer' | 'Trainer' (server only allows these two roles
-// through /auth/register; anything else is silently downgraded to
-// 'customer' server-side - see the owner-signup handling note in
-// components.js for how that's surfaced to the user).
-export async function register({ name, email, password, role }) {
+// role should be 'Customer' | 'Trainer' | 'Owner' (server normalizes allowed self-registration roles).
+// companySlug and phone are optional for register; phone is used for owner notifications.
+export async function register({ name, email, password, role, companySlug, phone }) {
+  const payload = { name, email, password, role: toApiRole(role) };
+  if (companySlug) payload.companySlug = companySlug;
+  if (phone) payload.phone = phone;
   const { token, user } = await apiFetch('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ name, email, password, role: toApiRole(role) })
+    body: JSON.stringify(payload)
   });
   setToken(token);
   const uiUser = userFromApi(user);

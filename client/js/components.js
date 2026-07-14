@@ -20,7 +20,29 @@ export function renderNavbar(currentUser, onNavigate, onSignOut) {
   const header = document.createElement('header');
   header.className = 'navbar';
   
-  header.innerHTML = `
+  header.innerHTML = currentUser ? `
+    <div class="container">
+      <div class="logo" id="nav-logo" style="cursor: pointer;">
+        ${ICONS.dumbbell} <span>Vigor</span>GMS
+      </div>
+      <nav class="nav-links">
+        <span class="nav-link" id="nav-dash" style="color: var(--accent-green);">Dashboard</span>
+        <button class="btn-secondary" id="nav-auth-btn">${currentUser.name}</button>
+        <div id="nav-profile-panel" class="nav-profile-panel" style="display:none;">
+          <div class="nav-profile-header">
+            <div style="font-weight:700; color: var(--text-primary); font-size:14px;">${currentUser.name}</div>
+            <div style="font-size:11px; color: var(--text-muted);">${currentUser.email}</div>
+            <div style="font-size:11px; color: var(--text-muted); text-transform: capitalize;">${currentUser.role}</div>
+          </div>
+          <div class="nav-profile-actions">
+            <button class="btn-secondary" id="nav-profile-logout" style="width:100%; display:flex; align-items:center; justify-content:center; gap:6px;">
+              ${ICONS.user} Logout
+            </button>
+          </div>
+        </div>
+      </nav>
+    </div>
+  ` : `
     <div class="container">
       <div class="logo" id="nav-logo" style="cursor: pointer;">
         ${ICONS.dumbbell} <span>Vigor</span>GMS
@@ -29,37 +51,63 @@ export function renderNavbar(currentUser, onNavigate, onSignOut) {
         <span class="nav-link" id="nav-features">Features</span>
         <span class="nav-link" id="nav-pricing">Pricing</span>
         <span class="nav-link" id="nav-directory">Directories</span>
-        ${currentUser 
-          ? `<span class="nav-link" id="nav-dash" style="color: var(--accent-green);">Dashboard</span>`
-          : ''
-        }
-        ${currentUser 
-          ? `<button class="btn-secondary" id="nav-auth-btn">${currentUser.name} (Logout)</button>`
-          : `<button class="btn-primary" id="nav-auth-btn">${ICONS.user} Sign In</button>`
-        }
+        <button class="btn-primary" id="nav-auth-btn">${ICONS.user} Sign In</button>
       </nav>
     </div>
   `;
 
   // Bind Event Listeners
-  header.querySelector('#nav-logo').addEventListener('click', () => onNavigate('home'));
-  header.querySelector('#nav-features').addEventListener('click', () => {
-    onNavigate('home');
-    setTimeout(() => document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' }), 50);
-  });
-  header.querySelector('#nav-pricing').addEventListener('click', () => {
-    onNavigate('home');
-    setTimeout(() => document.getElementById('pricing-section')?.scrollIntoView({ behavior: 'smooth' }), 50);
-  });
-  header.querySelector('#nav-directory').addEventListener('click', () => {
-    onNavigate('home');
-    setTimeout(() => document.getElementById('directory-section')?.scrollIntoView({ behavior: 'smooth' }), 50);
-  });
-  
   if (currentUser) {
-    header.querySelector('#nav-dash').addEventListener('click', () => onNavigate('dashboard'));
-    header.querySelector('#nav-auth-btn').addEventListener('click', onSignOut);
+    header.querySelector('#nav-logo').addEventListener('click', () => onNavigate('dashboard'));
+    const dashLink = header.querySelector('#nav-dash');
+    if (dashLink) dashLink.addEventListener('click', () => onNavigate('dashboard'));
+    const authBtn = header.querySelector('#nav-auth-btn');
+    const panel = header.querySelector('#nav-profile-panel');
+    let panelOpen = false;
+    const togglePanel = (e) => {
+      e.stopPropagation();
+      panelOpen = !panelOpen;
+      panel.style.display = panelOpen ? 'block' : 'none';
+    };
+    authBtn.addEventListener('click', togglePanel);
+
+    const closePanel = (e) => {
+      if (!header.contains(e.target)) {
+        panelOpen = false;
+        panel.style.display = 'none';
+        document.removeEventListener('click', closePanel);
+      }
+    };
+    const openAndListen = () => {
+      if (!panelOpen) {
+        document.addEventListener('click', closePanel);
+      }
+    };
+    authBtn.addEventListener('click', openAndListen);
+
+    const logoutBtn = header.querySelector('#nav-profile-logout');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        panelOpen = false;
+        panel.style.display = 'none';
+        onSignOut();
+      });
+    }
   } else {
+    header.querySelector('#nav-logo').addEventListener('click', () => onNavigate('home'));
+    header.querySelector('#nav-features').addEventListener('click', () => {
+      onNavigate('home');
+      setTimeout(() => document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' }), 50);
+    });
+    header.querySelector('#nav-pricing').addEventListener('click', () => {
+      onNavigate('home');
+      setTimeout(() => document.getElementById('pricing-section')?.scrollIntoView({ behavior: 'smooth' }), 50);
+    });
+    header.querySelector('#nav-directory').addEventListener('click', () => {
+      onNavigate('home');
+      setTimeout(() => document.getElementById('directory-section')?.scrollIntoView({ behavior: 'smooth' }), 50);
+    });
     header.querySelector('#nav-auth-btn').addEventListener('click', () => onNavigate('auth', 'login'));
   }
 
@@ -1129,7 +1177,7 @@ function renderOwnerView(ownerUser) {
 
     // Low stock items count
     const inventory = db.getInventory();
-    const lowStockCount = inventory.filter(i => i.type === 'subliment' && i.quantity <= i.threshold).length;
+    const lowStockCount = inventory.filter(i => i.threshold != null && i.quantity <= i.threshold).length;
 
     return { totalMembers, totalTrainers, activeCheckins: activeLogs.length, lowStockCount, inventory, logs };
   };
@@ -1186,7 +1234,7 @@ function renderOwnerView(ownerUser) {
   // Low stock check
   const renderAlerts = () => {
     const inv = db.getInventory();
-    const lowItems = inv.filter(i => i.type === 'subliment' && i.quantity <= i.threshold);
+    const lowItems = inv.filter(i => i.threshold != null && i.quantity <= i.threshold);
     if (lowItems.length > 0) {
       alertBox.innerHTML = `
         <div class="low-stock-alert">
@@ -1493,7 +1541,7 @@ function renderOwnerView(ownerUser) {
               if (item.status === 'Broken') badgeStatus = 'status-broken';
               else if (item.status === 'Under Maintenance') badgeStatus = 'status-maintenance';
 
-              const isLow = item.type === 'subliment' && item.quantity <= item.threshold;
+              const isLow = item.threshold != null && item.quantity <= item.threshold;
 
               return `
                 <tr>
@@ -1505,14 +1553,13 @@ function renderOwnerView(ownerUser) {
                   </td>
                   <td><span class="status-badge ${badgeStatus}">${item.status}</span></td>
                   <td style="font-size: 12px; color: var(--text-muted);">
-                    ${item.type === 'equipment' ? `Serviced: ${item.lastServiced || 'N/A'}` : `
-                      <span class="inline-threshold-display" data-id="${item.id}">Min Threshold: ${item.threshold ?? '-'}</span>
-                      <span class="inline-threshold-edit" data-id="${item.id}" style="display:none;">
-                        <input type="number" class="form-input inline-threshold-input" value="${item.threshold ?? 0}" style="width:80px; padding:4px 8px; font-size:12px;" data-id="${item.id}">
-                      </span>
-                      <button class="btn-secondary threshold-edit-btn" style="padding: 2px 8px; font-size:11px; margin-left:6px;" data-id="${item.id}">Set</button>
-                      <button class="btn-primary threshold-save-btn" style="padding: 2px 8px; font-size:11px; margin-left:4px; display:none;" data-id="${item.id}">Save</button>
-                    `}
+                    <span id="serviced-${item.id}" style="${item.type === 'equipment' ? '' : 'display:none;'}">Serviced: ${item.lastServiced || 'N/A'}</span>
+                    <span class="inline-threshold-display" data-id="${item.id}">Min Threshold: ${item.threshold ?? '-'}</span>
+                    <span class="inline-threshold-edit" data-id="${item.id}" style="display:none;">
+                      <input type="number" class="form-input inline-threshold-input" value="${item.threshold ?? 0}" style="width:80px; padding:4px 8px; font-size:12px;" data-id="${item.id}">
+                    </span>
+                    <button class="btn-secondary threshold-edit-btn" style="padding: 2px 8px; font-size:11px; margin-left:6px;" data-id="${item.id}">Set</button>
+                    <button class="btn-primary threshold-save-btn" style="padding: 2px 8px; font-size:11px; margin-left:4px; display:none;" data-id="${item.id}">Save</button>
                   </td>
                   <td>
                     <div style="display: flex; gap: 8px;">
@@ -1663,7 +1710,7 @@ function renderOwnerView(ownerUser) {
           quantity,
           status,
           lastServiced: type === 'equipment' ? new Date().toISOString().split('T')[0] : undefined,
-          threshold: type === 'subliment' ? threshold : undefined
+          threshold
         };
 
         await db.saveInventory(newItem);

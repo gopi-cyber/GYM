@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS users (
   company_id TEXT NOT NULL REFERENCES companies(id),
   membership TEXT,
   joined_date TEXT DEFAULT (date('now')),
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT (datetime('now')),
+  phone TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_company ON users(company_id);
