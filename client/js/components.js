@@ -2082,35 +2082,50 @@ export function showConfirmModal(title, message, onConfirm) {
 export function showProfileModal(user) {
   const modal = document.createElement('div');
   modal.className = 'custom-modal-overlay';
+  const name = user.name || '';
+  const email = user.email || '';
+  const role = user.role || '';
+  const companyName = user.companyName || '';
+  const joinedDate = user.joinedDate || user.joined_date || '-';
+  const avatarUrl = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=10b981&color=fff`;
   modal.innerHTML = `
     <div class="custom-modal-card glass-panel">
-      <div class="custom-modal-header">
-        <h3>Your profile</h3>
+      <div class="custom-modal-header profile-modal-header">
+        <div class="profile-modal-avatar">
+          <img src="${avatarUrl}" alt="${name || 'User'}" />
+        </div>
+        <div>
+          <h3>Your profile</h3>
+          <div class="profile-subtitle" style="color: var(--text-muted); font-size: 12px;">View and edit your details</div>
+        </div>
       </div>
       <div class="custom-modal-body">
-        <div class="profile-row">
-          <span class="profile-label">Name</span>
-          <span>${user.name || ''}</span>
-        </div>
-        <div class="profile-row">
-          <span class="profile-label">Email</span>
-          <span>${user.email || ''}</span>
-        </div>
-        <div class="profile-row">
-          <span class="profile-label">Role</span>
-          <span>${user.role || ''}</span>
-        </div>
-        <div class="profile-row">
-          <span class="profile-label">Company</span>
-          <span>${user.companyName || ''}</span>
-        </div>
-        <div class="profile-row">
-          <span class="profile-label">Joined</span>
-          <span>${user.joinedDate || user.joined_date || '-'}</span>
-        </div>
+        <form id="profile-form" class="profile-form" novaildate>
+          <div class="profile-field">
+            <label>Name</label>
+            <input type="text" id="profile-name" value="${name}" />
+          </div>
+          <div class="profile-field">
+            <label>Email</label>
+            <input type="email" id="profile-email" value="${email}" />
+          </div>
+          <div class="profile-field">
+            <label>Role</label>
+            <input type="text" id="profile-role" value="${role}" disabled />
+          </div>
+          <div class="profile-field">
+            <label>Company</label>
+            <input type="text" id="profile-company" value="${companyName}" disabled />
+          </div>
+          <div class="profile-field">
+            <label>Joined</label>
+            <input type="text" id="profile-joined" value="${joinedDate}" disabled />
+          </div>
+        </form>
       </div>
       <div class="custom-modal-actions">
-        <button class="modal-cancel-btn">Close</button>
+        <button class="modal-cancel-btn" id="profile-cancel-edit">Cancel</button>
+        <button class="modal-confirm-btn" id="profile-save">Save changes</button>
       </div>
     </div>
   `;
@@ -2120,17 +2135,39 @@ export function showProfileModal(user) {
     modal.remove();
     document.body.style.overflow = '';
   };
-  modal.querySelector('.modal-cancel-btn').addEventListener('click', close);
+  const getUpdatedUser = () => ({
+    ...user,
+    name: (modal.querySelector('#profile-name')?.value || '').trim(),
+    email: (modal.querySelector('#profile-email')?.value || '').trim(),
+  });
+  modal.querySelector('.modal-cancel-btn').addEventListener('click', () => {
+    close();
+  });
+  modal.querySelector('#profile-save').addEventListener('click', () => {
+    const updated = getUpdatedUser();
+    Object.assign(user, updated);
+    refreshNavbarAfterProfileUpdate(updated);
+    close();
+  });
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 }
 
 export function showSettingsModal(user) {
   const modal = document.createElement('div');
   modal.className = 'custom-modal-overlay';
+  const name = user.name || '';
+  const email = user.email || '';
+  const avatarUrl = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=10b981&color=fff`;
   modal.innerHTML = `
     <div class="custom-modal-card glass-panel">
-      <div class="custom-modal-header">
-        <h3>Settings</h3>
+      <div class="custom-modal-header profile-modal-header">
+        <div class="profile-modal-avatar">
+          <img src="${avatarUrl}" alt="${name || 'User'}" />
+        </div>
+        <div>
+          <h3>Settings</h3>
+          <div class="profile-subtitle" style="color: var(--text-muted); font-size: 12px;">Account and app preferences</div>
+        </div>
       </div>
       <div class="custom-modal-body">
         <p style="color: var(--text-secondary);">Manage your account preferences, notifications, and profile updates.</p>
@@ -2156,4 +2193,14 @@ export function showSettingsModal(user) {
   };
   modal.querySelector('.modal-cancel-btn').addEventListener('click', close);
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+}
+
+export function refreshNavbarAfterProfileUpdate(updatedUser) {
+  const stored = window.__vigorCurrentUser;
+  if (!stored) return;
+  Object.assign(stored, updatedUser);
+  const welcomeEl = document.querySelector('#welcome-heading');
+  const profileTitleEl = document.querySelector('#profile-sidebar-name');
+  if (welcomeEl && updatedUser.name) welcomeEl.textContent = 'Welcome back, ' + updatedUser.name;
+  if (profileTitleEl && updatedUser.name) profileTitleEl.textContent = updatedUser.name;
 }
