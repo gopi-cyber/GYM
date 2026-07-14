@@ -1387,5 +1387,105 @@ input:checked + .slider:before {
   to { transform: translateY(0); opacity: 1; }
 }
 
+/* Profile dropdown / avatar menu */
+.nav-profile-avatar-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.nav-profile-avatar-btn img {
+  width: 36px;
+  height: 36px;
+  display: block;
+  border-radius: 50%;
+  border: 1px solid var(--border-glass);
+  object-fit: cover;
+}
+.nav-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-glass);
+  margin-bottom: 8px;
+}
+.nav-profile-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--border-glass);
+  flex-shrink: 0;
+}
+.nav-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.nav-profile-meta {
+  min-width: 0;
+}
+.nav-profile-meta div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-profile-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px 12px;
+}
+.nav-profile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 10px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  transition: var(--transition-smooth);
+}
+.nav-profile-menu-item:hover {
+  background: rgba(15, 23, 42, 0.05);
+}
+.nav-profile-menu-item--danger {
+  color: #dc2626;
+}
+.nav-profile-menu-item--danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+.nav-profile-divider {
+  height: 1px;
+  background: var(--border-glass);
+  margin: 6px 0;
+}
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-glass);
+}
+.profile-row:last-child {
+  border-bottom: none;
+}
+.profile-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
 
 

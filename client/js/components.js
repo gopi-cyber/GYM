@@ -27,16 +27,33 @@ export function renderNavbar(currentUser, onNavigate, onSignOut) {
       </div>
       <nav class="nav-links">
         <span class="nav-link" id="nav-dash" style="color: var(--accent-green);">Dashboard</span>
-        <button class="btn-secondary" id="nav-auth-btn">${currentUser.name}</button>
+        <button class="nav-profile-avatar-btn" id="nav-auth-btn" aria-label="Open profile menu">
+          <img src="${currentUser.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(currentUser.name || 'User') + '&background=10b981&color=fff'}" alt="${currentUser.name || 'User'}" />
+        </button>
         <div id="nav-profile-panel" class="nav-profile-panel" style="display:none;">
           <div class="nav-profile-header">
-            <div style="font-weight:700; color: var(--text-primary); font-size:14px;">${currentUser.name}</div>
-            <div style="font-size:11px; color: var(--text-muted);">${currentUser.email}</div>
-            <div style="font-size:11px; color: var(--text-muted); text-transform: capitalize;">${currentUser.role}</div>
+            <div class="nav-profile-avatar">
+              <img src="${currentUser.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(currentUser.name || 'User') + '&background=10b981&color=fff'}" alt="${currentUser.name || 'User'}" />
+            </div>
+            <div class="nav-profile-meta">
+              <div style="font-weight:700; color: var(--text-primary); font-size:14px;">${currentUser.name}</div>
+              <div style="font-size:11px; color: var(--text-muted);">${currentUser.email}</div>
+              <div style="font-size:11px; color: var(--text-muted); text-transform: capitalize;">${currentUser.role}</div>
+            </div>
           </div>
-          <div class="nav-profile-actions">
-            <button class="btn-secondary" id="nav-profile-logout" style="width:100%; display:flex; align-items:center; justify-content:center; gap:6px;">
-              ${ICONS.user} Logout
+          <div class="nav-profile-menu">
+            <button class="nav-profile-menu-item" data-action="profile">
+              ${ICONS.user} Your profile
+            </button>
+            <button class="nav-profile-menu-item" data-action="dashboard">
+              ⭐ Dashboard
+            </button>
+            <button class="nav-profile-menu-item" data-action="settings">
+              ⚙️ Settings
+            </button>
+            <div class="nav-profile-divider"></div>
+            <button class="nav-profile-menu-item nav-profile-menu-item--danger" data-action="logout">
+              Sign out
             </button>
           </div>
         </div>
@@ -61,39 +78,46 @@ export function renderNavbar(currentUser, onNavigate, onSignOut) {
     header.querySelector('#nav-logo').addEventListener('click', () => onNavigate('dashboard'));
     const dashLink = header.querySelector('#nav-dash');
     if (dashLink) dashLink.addEventListener('click', () => onNavigate('dashboard'));
+
     const authBtn = header.querySelector('#nav-auth-btn');
     const panel = header.querySelector('#nav-profile-panel');
     let panelOpen = false;
-    const togglePanel = (e) => {
-      e.stopPropagation();
-      panelOpen = !panelOpen;
-      panel.style.display = panelOpen ? 'block' : 'none';
-    };
-    authBtn.addEventListener('click', togglePanel);
 
-    const closePanel = (e) => {
+    const openProfilePanel = (e) => {
+      e.stopPropagation();
+      panelOpen = true;
+      panel.style.display = 'block';
+      document.addEventListener('click', closeProfilePanelOutside);
+    };
+
+    const closeProfilePanelOutside = (e) => {
       if (!header.contains(e.target)) {
         panelOpen = false;
         panel.style.display = 'none';
-        document.removeEventListener('click', closePanel);
+        document.removeEventListener('click', closeProfilePanelOutside);
       }
     };
-    const openAndListen = () => {
-      if (!panelOpen) {
-        document.addEventListener('click', closePanel);
-      }
-    };
-    authBtn.addEventListener('click', openAndListen);
 
-    const logoutBtn = header.querySelector('#nav-profile-logout');
-    if (logoutBtn) {
-      logoutBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
+    authBtn.addEventListener('click', openProfilePanel);
+
+    panel.querySelectorAll('.nav-profile-menu-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const action = btn.getAttribute('data-action');
         panelOpen = false;
         panel.style.display = 'none';
-        onSignOut();
+        document.removeEventListener('click', closeProfilePanelOutside);
+
+        if (action === 'logout') {
+          onSignOut();
+        } else if (action === 'profile') {
+          showProfileModal(currentUser);
+        } else if (action === 'settings') {
+          showSettingsModal(currentUser);
+        } else if (action === 'dashboard') {
+          onNavigate('dashboard');
+        }
       });
-    }
+    });
   } else {
     header.querySelector('#nav-logo').addEventListener('click', () => onNavigate('home'));
     header.querySelector('#nav-features').addEventListener('click', () => {
@@ -2053,4 +2077,83 @@ export function showConfirmModal(title, message, onConfirm) {
       close();
     }
   });
+}
+
+export function showProfileModal(user) {
+  const modal = document.createElement('div');
+  modal.className = 'custom-modal-overlay';
+  modal.innerHTML = `
+    <div class="custom-modal-card glass-panel">
+      <div class="custom-modal-header">
+        <h3>Your profile</h3>
+      </div>
+      <div class="custom-modal-body">
+        <div class="profile-row">
+          <span class="profile-label">Name</span>
+          <span>${user.name || ''}</span>
+        </div>
+        <div class="profile-row">
+          <span class="profile-label">Email</span>
+          <span>${user.email || ''}</span>
+        </div>
+        <div class="profile-row">
+          <span class="profile-label">Role</span>
+          <span>${user.role || ''}</span>
+        </div>
+        <div class="profile-row">
+          <span class="profile-label">Company</span>
+          <span>${user.companyName || ''}</span>
+        </div>
+        <div class="profile-row">
+          <span class="profile-label">Joined</span>
+          <span>${user.joinedDate || user.joined_date || '-'}</span>
+        </div>
+      </div>
+      <div class="custom-modal-actions">
+        <button class="modal-cancel-btn">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.body.style.overflow = 'hidden';
+  const close = () => {
+    modal.remove();
+    document.body.style.overflow = '';
+  };
+  modal.querySelector('.modal-cancel-btn').addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+}
+
+export function showSettingsModal(user) {
+  const modal = document.createElement('div');
+  modal.className = 'custom-modal-overlay';
+  modal.innerHTML = `
+    <div class="custom-modal-card glass-panel">
+      <div class="custom-modal-header">
+        <h3>Settings</h3>
+      </div>
+      <div class="custom-modal-body">
+        <p style="color: var(--text-secondary);">Manage your account preferences, notifications, and profile updates.</p>
+        <div class="profile-row">
+          <span class="profile-label">Theme</span>
+          <span>System default</span>
+        </div>
+        <div class="profile-row">
+          <span class="profile-label">Notifications</span>
+          <span>Enabled</span>
+        </div>
+      </div>
+      <div class="custom-modal-actions">
+        <button class="modal-cancel-btn">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.body.style.overflow = 'hidden';
+  const close = () => {
+    modal.remove();
+    document.body.style.overflow = '';
+  };
+  modal.querySelector('.modal-cancel-btn').addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 }
