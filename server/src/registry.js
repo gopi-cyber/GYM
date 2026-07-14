@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT,
   gym_address TEXT,
   gps_location TEXT,
-  mobile_number TEXT
+  mobile_number TEXT,
+  avatar TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_company ON users(company_id);
@@ -46,7 +47,8 @@ const need = [
   ['phone', 'ALTER TABLE users ADD COLUMN phone TEXT'],
   ['gym_address', "ALTER TABLE users ADD COLUMN gym_address TEXT"],
   ['gps_location', "ALTER TABLE users ADD COLUMN gps_location TEXT"],
-  ['mobile_number', "ALTER TABLE users ADD COLUMN mobile_number TEXT"]
+  ['mobile_number', "ALTER TABLE users ADD COLUMN mobile_number TEXT"],
+  ['avatar', "ALTER TABLE users ADD COLUMN avatar TEXT"]
 ];
 for (const [name, sql] of need) {
   if (!cols.includes(name)) {

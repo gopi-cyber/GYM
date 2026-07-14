@@ -2091,78 +2091,143 @@ export function showProfileModal(user) {
   modal.innerHTML = `
     <div class="custom-modal-card glass-panel">
       <div class="custom-modal-header profile-modal-header">
-        <div class="profile-modal-avatar">
+        <label class="profile-avatar-upload" title="Change photo">
           <img src="${avatarUrl}" alt="${name || 'User'}" />
-        </div>
+          <input type="file" accept="image/*" id="profile-avatar-input" />
+        </label>
         <div>
           <h3>Your profile</h3>
           <div class="profile-subtitle" style="color: var(--text-muted); font-size: 12px;">View and edit your details</div>
         </div>
       </div>
       <div class="custom-modal-body">
-        <form id="profile-form" class="profile-form" novaildate>
+        <form id="profile-form" class="profile-form" novalidate>
           <div class="profile-field">
             <label>Name</label>
             <input type="text" id="profile-name" value="${name}" />
+            <button type="button" class="field-save-btn" data-target="profile-name">Save</button>
           </div>
           <div class="profile-field">
             <label>Email</label>
             <input type="email" id="profile-email" value="${email}" />
+            <button type="button" class="field-save-btn" data-target="profile-email">Save</button>
           </div>
           <div class="profile-field">
             <label>Mobile Number</label>
-            <input type="tel" id="profile-mobile" value="${mobileNumber}" />
+            <input type="tel" id="profile-mobile" value="${mobileNumber}" placeholder="Add mobile number" />
+            <button type="button" class="field-save-btn" data-target="profile-mobile">Save</button>
           </div>
           <div class="profile-field">
             <label>Gym Address</label>
-            <input type="text" id="profile-gym-address" value="${gymAddress}" />
+            <input type="text" id="profile-gym-address" value="${gymAddress}" placeholder="Add address" />
+            <button type="button" class="field-save-btn" data-target="profile-gym-address">Save</button>
           </div>
           <div class="profile-field">
             <label>GPS Location</label>
-            <input type="text" id="profile-gps" value="${gpsLocation}" />
+            <div class="gps-picker">
+              <input type="text" id="profile-gps" value="${gpsLocation}" placeholder="Click map to select" />
+              <button type="button" id="profile-map-btn" class="map-picker-btn">Pick from map</button>
+            </div>
+            <iframe id="profile-map" title="Location picker" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer"></iframe>
+            <button type="button" class="field-save-btn" data-target="profile-gps">Save</button>
           </div>
         </form>
       </div>
-      <div class="custom-modal-actions">
-        <button class="modal-cancel-btn" id="profile-cancel-edit">Cancel</button>
-        <button class="modal-confirm-btn" id="profile-save">Save changes</button>
-      </div>
     </div>
   `;
+
   document.body.appendChild(modal);
   document.body.style.overflow = 'hidden';
+
   const close = () => {
     modal.remove();
     document.body.style.overflow = '';
   };
-  const getUpdatedUser = () => ({
-    ...user,
-    name: (modal.querySelector('#profile-name')?.value || '').trim(),
-    email: (modal.querySelector('#profile-email')?.value || '').trim(),
-    mobileNumber: (modal.querySelector('#profile-mobile')?.value || '').trim(),
-    gymAddress: (modal.querySelector('#profile-gym-address')?.value || '').trim(),
-    gpsLocation: (modal.querySelector('#profile-gps')?.value || '').trim(),
+
+  const readFileAsDataUrl = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
   });
-  modal.querySelector('.modal-cancel-btn').addEventListener('click', () => {
-    close();
+
+  const avatarInput = modal.querySelector('#profile-avatar-input');
+  if (avatarInput) {
+    avatarInput.addEventListener('change', async () => {
+      const file = avatarInput.files && avatarInput.files[0];
+      if (!file) return;
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const img = modal.querySelector('.profile-avatar-upload img');
+        if (img) img.src = dataUrl;
+        user.avatar = dataUrl;
+      } catch (e) {
+        console.error('Avatar read failed', e);
+      }
+    });
+  }
+
+  modal.querySelector('#profile-map-btn').addEventListener('click', () => {
+    const mapIframe = modal.querySelector('#profile-map');
+    const latlng = (modal.querySelector('#profile-gps')?.value || '').trim();
+    const src = latlng
+      ? `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(latlng)}&layer=mapnik`
+      : `https://www.openstreetmap.org/export/embed.html?bbox=-0.0040,51.4864,0.0040,51.4915&layer=mapnik`;
+    if (mapIframe) {
+      mapIframe.src = src;
+      mapIframe.style.display = 'block';
+    }
   });
-  modal.querySelector('#profile-save').addEventListener('click', async () => {
-    const updated = getUpdatedUser();
-    Object.assign(user, updated);
+
+  modal.querySelectorAll('.field-save-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const input = modal.querySelector('#' + btn.dataset.target);
+      if (!input) return;
+
+    const fieldMap = {
+      'profile-name': 'name',
+      'profile-email': 'email',
+      'profile-mobile': 'mobileNumber',
+      'profile-gym-address': 'gymAddress',
+      'profile-gps': 'gpsLocation'
+    };
+    const field = fieldMap[btn.dataset.target];
+    if (!field) return;
+
+    const value = input.value.trim();
+    user[field] = value;
+
     try {
-      await db.updateProfile({
-        name: updated.name,
-        email: updated.email,
-        phone: updated.phone || null,
-        gymAddress: updated.gymAddress || null,
-        gpsLocation: updated.gpsLocation || null,
-        mobileNumber: updated.mobileNumber || null
-      });
+      const payload = {
+        name: field === 'name' ? value : (user.name || null),
+        email: field === 'email' ? value : (user.email || null),
+        phone: user.phone || null,
+        gymAddress: field === 'gymAddress' ? value : (user.gymAddress || null),
+        gpsLocation: field === 'gpsLocation' ? value : (user.gpsLocation || null),
+        mobileNumber: field === 'mobileNumber' ? value : (user.mobileNumber || null),
+        avatar: user.avatar || null
+      };
+      const saved = await db.updateProfile(payload);
+      if (saved) Object.assign(user, saved);
     } catch (e) {
       console.error('Profile update failed', e);
+      return;
     }
-    refreshNavbarAfterProfileUpdate(updated);
-    close();
+
+    refreshNavbarAfterProfileUpdate(user);
+
+    btn.textContent = 'Saved';
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = 'Save';
+      btn.disabled = false;
+    }, 2000);
+  });
+});
+
+  modal.querySelector('#profile-cancel-edit').addEventListener('click', close);
+  modal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') close();
   });
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 }

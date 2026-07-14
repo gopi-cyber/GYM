@@ -1536,5 +1536,57 @@ input:checked + .slider:before {
   opacity: 0.7;
   background: rgba(15, 23, 42, 0.03);
 }
+.profile-avatar-upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--border-glass);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.profile-avatar-upload img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.profile-avatar-upload input {
+  display: none;
+}
+.gps-picker {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.gps-picker input {
+  flex: 1;
+}
+.map-picker-btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-glass);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+.map-picker-btn:hover {
+  border-color: var(--border-focus);
+}
+#profile-map {
+  display: none;
+  margin-top: 8px;
+  width: 100%;
+  height: 200px;
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.04);
+}
 
 

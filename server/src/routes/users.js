@@ -12,7 +12,7 @@ router.get('/me', requireAuth, (req, res) => {
 
 // PUT /api/users/me
 router.put('/me', requireAuth, (req, res) => {
-  const { name, email, phone, gymAddress, gpsLocation, mobileNumber } = req.body || {};
+  const { name, email, phone, gymAddress, gpsLocation, mobileNumber, avatar } = req.body || {};
   const updates = [];
   const values = [];
   if (typeof name === 'string' && name.trim()) { updates.push('name = ?'); values.push(name.trim()); }
@@ -24,13 +24,15 @@ router.put('/me', requireAuth, (req, res) => {
   if (typeof gpsLocation === 'string') { updates.push('gps_location = ?'); values.push(gpsLocation.trim()); }
   else if (gpsLocation === null) { updates.push('gps_location = NULL'); }
   if (typeof mobileNumber === 'string' && mobileNumber.trim()) { updates.push('mobile_number = ?'); values.push(mobileNumber.trim()); }
+  if (typeof avatar === 'string' && avatar.trim()) { updates.push('avatar = ?'); values.push(avatar.trim()); }
+  else if (avatar === null) { updates.push('avatar = NULL'); }
 
   if (!updates.length) return res.status(400).json({ error: 'No profile fields to update' });
 
   values.push(req.user.id);
   req.registryDb.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
 
-  const row = req.registryDb.prepare('SELECT id, email, name, role, membership, joined_date, phone, gym_address, gps_location, mobile_number FROM users WHERE id = ?').get(req.user.id);
+  const row = req.registryDb.prepare('SELECT id, email, name, role, membership, joined_date, phone, gym_address, gps_location, mobile_number, avatar FROM users WHERE id = ?').get(req.user.id);
   res.json(row);
 });
 
