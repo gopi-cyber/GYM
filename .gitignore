@@ -1,0 +1,39 @@
+# Node / backend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Database files
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+
+# Temp / adhoc scripts
+C:/Users/chitr/AppData/Local/Temp/hermes-verify-*
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Build/cache
+dist/
+.cache/
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+server/src/data/gyms/*.db
+server/src/data/gyms/*.db-shm
+server/src/data/gyms/*.db-wal
