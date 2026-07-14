@@ -2175,6 +2175,38 @@ export function showProfileModal(user) {
     mapIframe.style.display = 'block';
   });
 
+  const debounceTimers = new Map();
+  const delay = (id, ms, fn) => {
+    clearTimeout(debounceTimers.get(id));
+    debounceTimers.set(id, setTimeout(fn, ms));
+  };
+
+  const geocodeAddress = async (address) => {
+    if (!address || address.length < 5) return;
+    const gpsInput = modal.querySelector('#profile-gps');
+    if (!gpsInput) return;
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`, {
+        headers: { 'Accept': 'application/json', 'User-Agent': 'VigorGMS/1.0' }
+      });
+      const data = await res.json();
+      if (data && data[0] && data[0].lat && data[0].lon) {
+        const coord = `${data[0].lat},${data[0].lon}`;
+        gpsInput.value = coord;
+        user.gpsLocation = coord;
+      }
+    } catch (e) {
+      console.error('Geocode failed', e);
+    }
+  };
+
+  modal.querySelector('#profile-gym-address')?.addEventListener('input', (e) => {
+    const val = (e.target.value || '').trim();
+    user.gymAddress = val;
+    if (!val) return;
+    delay('gym-address', 700, () => geocodeAddress(val));
+  });
+
   const saveProfile = async () => {
     const nameVal = (modal.querySelector('#profile-name')?.value || '').trim();
     const emailVal = (modal.querySelector('#profile-email')?.value || '').trim();

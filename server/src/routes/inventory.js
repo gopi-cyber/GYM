@@ -48,10 +48,10 @@ function checkLowStock(req, gymDb, companyId) {
     const rows = gymDb.prepare("SELECT name, quantity, threshold FROM inventory WHERE company_id = ? AND threshold IS NOT NULL AND quantity <= threshold").all(companyId);
     if (!rows.length) return;
     const registry = req.registryDb;
-    const owners = registry.prepare("SELECT id, name, phone, email FROM users WHERE company_id = ? AND role = 'owner'").all(companyId);
+    const owners = registry.prepare("SELECT id, name, phone, mobile_number, email FROM users WHERE company_id = ? AND role = 'owner'").all(companyId);
     const msg = `Low stock alert: ${rows.map(r => `${r.name} (${r.quantity}/${r.threshold})`).join(', ')}`;
     owners.forEach(o => {
-      sendSms(o.phone, msg, o);
+      sendSms(o.phone || o.mobile_number, msg, o);
       console.log(`SMS queued for gym owner ${o.name || o.email}: ${msg}`);
     });
   } catch (err) {
@@ -60,20 +60,15 @@ function checkLowStock(req, gymDb, companyId) {
 }
 
 function sendSms(phone, text, owner) {
-  if (!phone) return;
+  const to = phone || owner.mobile_number;
+  if (!to) return;
   if (process.env.SMS_PROVIDER === 'twilio' && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM) {
     const client = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    client.messages.create({ body: text, from: process.env.TWILIO_FROM, to: phone }).catch(err => console.error('Twilio SMS failed:', err.message));
-  } else if (process.env.SMS_PROVIDER === 'firebase' && process.env.FIREBASE_SERVER_KEY) {
-    const https = require('https');
-    const data = JSON.stringify({ to: phone, notification: { title: 'VigorGMS', body: text } });
-    const options = { hostname: 'fcm.googleapis.com', path: '/fcm/send', method: 'POST', headers: { Authorization: 'key=' + process.env.FIREBASE_SERVER_KEY, 'Content-Type': 'application/json' } };
-    const req = https.request(options, res => { const body = []; res.on('data', chunk => body.push(chunk)); res.on('end', () => { if (!String.fromCharCode.apply(null, body).includes('success')) console.error('Firebase SMS failed'); }); });
-    req.on('error', err => console.error('Firebase SMS failed:', err.message));
-    req.write(data);
-    req.end();
+    client.messages.create({ body: text, from: process.env.TWILIO_FROM, to: to })
+      .then(m => console.log(`WhatsApp/SMS queued sid=${m.sid} to=${to}`))
+      .catch(err => console.error('WhatsApp/SMS failed:', err.message));
   } else {
-    console.log(`[SMS] to=${phone} owner=${owner && owner.name || owner && owner.email || ''} body=${text}`);
+    console.log(`[ALERT] to=${to} body=${text}`);
   }
 }
 
