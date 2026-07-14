@@ -2105,22 +2105,18 @@ export function showProfileModal(user) {
           <div class="profile-field">
             <label>Name</label>
             <input type="text" id="profile-name" value="${name}" />
-            <button type="button" class="field-save-btn" data-target="profile-name">Save</button>
           </div>
           <div class="profile-field">
             <label>Email</label>
             <input type="email" id="profile-email" value="${email}" />
-            <button type="button" class="field-save-btn" data-target="profile-email">Save</button>
           </div>
           <div class="profile-field">
             <label>Mobile Number</label>
             <input type="tel" id="profile-mobile" value="${mobileNumber}" placeholder="Add mobile number" />
-            <button type="button" class="field-save-btn" data-target="profile-mobile">Save</button>
           </div>
           <div class="profile-field">
             <label>Gym Address</label>
             <input type="text" id="profile-gym-address" value="${gymAddress}" placeholder="Add address" />
-            <button type="button" class="field-save-btn" data-target="profile-gym-address">Save</button>
           </div>
           <div class="profile-field">
             <label>GPS Location</label>
@@ -2129,9 +2125,12 @@ export function showProfileModal(user) {
               <button type="button" id="profile-map-btn" class="map-picker-btn">Pick from map</button>
             </div>
             <iframe id="profile-map" title="Location picker" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer"></iframe>
-            <button type="button" class="field-save-btn" data-target="profile-gps">Save</button>
           </div>
         </form>
+      </div>
+      <div class="custom-modal-actions">
+        <button class="modal-cancel-btn" id="profile-cancel-edit">Cancel</button>
+        <button class="modal-confirm-btn" id="profile-save-all">Save</button>
       </div>
     </div>
   `;
@@ -2170,44 +2169,35 @@ export function showProfileModal(user) {
   modal.querySelector('#profile-map-btn').addEventListener('click', () => {
     const mapIframe = modal.querySelector('#profile-map');
     const latlng = (modal.querySelector('#profile-gps')?.value || '').trim();
-    const src = latlng
-      ? `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(latlng)}&layer=mapnik`
-      : `https://www.openstreetmap.org/export/embed.html?bbox=-0.0040,51.4864,0.0040,51.4915&layer=mapnik`;
-    if (mapIframe) {
-      mapIframe.src = src;
-      mapIframe.style.display = 'block';
-    }
+    mapIframe.src = latlng
+      ? `https://maps.google.com/maps?q=${encodeURIComponent(latlng)}&z=14&output=embed`
+      : 'https://maps.google.com/maps?q=VigorGMS&z=2&output=embed';
+    mapIframe.style.display = 'block';
   });
 
-  modal.querySelectorAll('.field-save-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const input = modal.querySelector('#' + btn.dataset.target);
-      if (!input) return;
+  const saveProfile = async () => {
+    const nameVal = (modal.querySelector('#profile-name')?.value || '').trim();
+    const emailVal = (modal.querySelector('#profile-email')?.value || '').trim();
+    const mobileVal = (modal.querySelector('#profile-mobile')?.value || '').trim();
+    const gymVal = (modal.querySelector('#profile-gym-address')?.value || '').trim();
+    const gpsVal = (modal.querySelector('#profile-gps')?.value || '').trim();
 
-    const fieldMap = {
-      'profile-name': 'name',
-      'profile-email': 'email',
-      'profile-mobile': 'mobileNumber',
-      'profile-gym-address': 'gymAddress',
-      'profile-gps': 'gpsLocation'
-    };
-    const field = fieldMap[btn.dataset.target];
-    if (!field) return;
-
-    const value = input.value.trim();
-    user[field] = value;
+    user.name = nameVal;
+    user.email = emailVal;
+    user.mobileNumber = mobileVal;
+    user.gymAddress = gymVal;
+    user.gpsLocation = gpsVal;
 
     try {
-      const payload = {
-        name: field === 'name' ? value : (user.name || null),
-        email: field === 'email' ? value : (user.email || null),
+      const saved = await db.updateProfile({
+        name: nameVal || null,
+        email: emailVal || null,
         phone: user.phone || null,
-        gymAddress: field === 'gymAddress' ? value : (user.gymAddress || null),
-        gpsLocation: field === 'gpsLocation' ? value : (user.gpsLocation || null),
-        mobileNumber: field === 'mobileNumber' ? value : (user.mobileNumber || null),
+        gymAddress: gymVal || null,
+        gpsLocation: gpsVal || null,
+        mobileNumber: mobileVal || null,
         avatar: user.avatar || null
-      };
-      const saved = await db.updateProfile(payload);
+      });
       if (saved) Object.assign(user, saved);
     } catch (e) {
       console.error('Profile update failed', e);
@@ -2215,16 +2205,18 @@ export function showProfileModal(user) {
     }
 
     refreshNavbarAfterProfileUpdate(user);
+    const saveBtn = modal.querySelector('#profile-save-all');
+    if (saveBtn) {
+      saveBtn.textContent = 'Saved';
+      saveBtn.disabled = true;
+      setTimeout(() => {
+        saveBtn.textContent = 'Save changes';
+        saveBtn.disabled = false;
+      }, 2000);
+    }
+  };
 
-    btn.textContent = 'Saved';
-    btn.disabled = true;
-    setTimeout(() => {
-      btn.textContent = 'Save';
-      btn.disabled = false;
-    }, 2000);
-  });
-});
-
+  modal.querySelector('#profile-save-all').addEventListener('click', saveProfile);
   modal.querySelector('#profile-cancel-edit').addEventListener('click', close);
   modal.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') close();
