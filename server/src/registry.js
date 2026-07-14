@@ -11,8 +11,8 @@ fs.mkdirSync(path.dirname(REGISTRY_PATH), { recursive: true });
 const db = new Database(REGISTRY_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
-
 db.exec(`
+
 CREATE TABLE IF NOT EXISTS companies (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -31,11 +31,27 @@ CREATE TABLE IF NOT EXISTS users (
   membership TEXT,
   joined_date TEXT DEFAULT (date('now')),
   created_at TEXT DEFAULT (datetime('now')),
-  phone TEXT
+  phone TEXT,
+  gym_address TEXT,
+  gps_location TEXT,
+  mobile_number TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_company ON users(company_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 `);
+
+const cols = db.prepare("PRAGMA table_info(users)").all().map(x => x.name);
+const need = [
+  ['phone', 'ALTER TABLE users ADD COLUMN phone TEXT'],
+  ['gym_address', "ALTER TABLE users ADD COLUMN gym_address TEXT"],
+  ['gps_location', "ALTER TABLE users ADD COLUMN gps_location TEXT"],
+  ['mobile_number', "ALTER TABLE users ADD COLUMN mobile_number TEXT"]
+];
+for (const [name, sql] of need) {
+  if (!cols.includes(name)) {
+    try { db.exec(sql); } catch (e) { /* ignore */ }
+  }
+}
 
 module.exports = db;

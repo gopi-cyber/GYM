@@ -2084,9 +2084,9 @@ export function showProfileModal(user) {
   modal.className = 'custom-modal-overlay';
   const name = user.name || '';
   const email = user.email || '';
-  const role = user.role || '';
-  const companyName = user.companyName || '';
-  const joinedDate = user.joinedDate || user.joined_date || '-';
+  const gymAddress = user.gymAddress || '';
+  const gpsLocation = user.gpsLocation || '';
+  const mobileNumber = user.mobileNumber || '';
   const avatarUrl = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=10b981&color=fff`;
   modal.innerHTML = `
     <div class="custom-modal-card glass-panel">
@@ -2110,16 +2110,16 @@ export function showProfileModal(user) {
             <input type="email" id="profile-email" value="${email}" />
           </div>
           <div class="profile-field">
-            <label>Role</label>
-            <input type="text" id="profile-role" value="${role}" disabled />
+            <label>Mobile Number</label>
+            <input type="tel" id="profile-mobile" value="${mobileNumber}" />
           </div>
           <div class="profile-field">
-            <label>Company</label>
-            <input type="text" id="profile-company" value="${companyName}" disabled />
+            <label>Gym Address</label>
+            <input type="text" id="profile-gym-address" value="${gymAddress}" />
           </div>
           <div class="profile-field">
-            <label>Joined</label>
-            <input type="text" id="profile-joined" value="${joinedDate}" disabled />
+            <label>GPS Location</label>
+            <input type="text" id="profile-gps" value="${gpsLocation}" />
           </div>
         </form>
       </div>
@@ -2139,13 +2139,28 @@ export function showProfileModal(user) {
     ...user,
     name: (modal.querySelector('#profile-name')?.value || '').trim(),
     email: (modal.querySelector('#profile-email')?.value || '').trim(),
+    mobileNumber: (modal.querySelector('#profile-mobile')?.value || '').trim(),
+    gymAddress: (modal.querySelector('#profile-gym-address')?.value || '').trim(),
+    gpsLocation: (modal.querySelector('#profile-gps')?.value || '').trim(),
   });
   modal.querySelector('.modal-cancel-btn').addEventListener('click', () => {
     close();
   });
-  modal.querySelector('#profile-save').addEventListener('click', () => {
+  modal.querySelector('#profile-save').addEventListener('click', async () => {
     const updated = getUpdatedUser();
     Object.assign(user, updated);
+    try {
+      await db.updateProfile({
+        name: updated.name,
+        email: updated.email,
+        phone: updated.phone || null,
+        gymAddress: updated.gymAddress || null,
+        gpsLocation: updated.gpsLocation || null,
+        mobileNumber: updated.mobileNumber || null
+      });
+    } catch (e) {
+      console.error('Profile update failed', e);
+    }
     refreshNavbarAfterProfileUpdate(updated);
     close();
   });

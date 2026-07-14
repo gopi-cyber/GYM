@@ -39,8 +39,8 @@ router.post('/register', (req, res) => {
   const allowedRole = ['owner', 'trainer', 'customer'].includes(role) ? role : 'customer';
 
   db.prepare(
-    'INSERT INTO users (id, email, password_hash, name, role, company_id) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(id, email, hash, name, allowedRole, company.id);
+    'INSERT INTO users (id, email, password_hash, name, role, company_id, phone, gym_address, gps_location, mobile_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, email, hash, name, allowedRole, company.id, req.body.phone || null, req.body.gymAddress || null, req.body.gpsLocation || null, req.body.mobileNumber || null);
 
   // Ensure gym DB exists for isolation.
   forCompany(company.id, company.db_path);

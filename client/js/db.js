@@ -85,7 +85,11 @@ function userFromApi(row) {
     email: row.email,
     role: capitalizeRole(row.role),
     membership: row.membership,
-    joinedDate: row.joined_date || row.joinedDate
+    joinedDate: row.joined_date || row.joinedDate,
+    phone: row.phone || '',
+    gymAddress: row.gym_address || '',
+    gpsLocation: row.gps_location || '',
+    mobileNumber: row.mobile_number || ''
   };
 }
 
@@ -387,4 +391,28 @@ export async function saveFitnessPlan(plan) {
   const idx = cache.fitnessPlans.findIndex(p => p.customerId === uiPlan.customerId);
   if (idx !== -1) cache.fitnessPlans[idx] = uiPlan; else cache.fitnessPlans.push(uiPlan);
   return uiPlan;
+}
+
+export async function updateProfile(fields) {
+  const row = await apiFetch('/users/me', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields)
+  });
+  const index = cache.users.findIndex(u => u && u.id === row.id);
+  if (index !== -1) {
+    cache.users[index] = { ...cache.users[index], ...userFromApi(row) };
+  } else {
+    cache.users.push(userFromApi(row));
+  }
+
+  const storedStr = localStorage.getItem(STORAGE_KEYS.USER);
+  if (storedStr) {
+    try {
+      const stored = JSON.parse(storedStr);
+      const merged = { ...stored, ...userFromApi(row) };
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(merged));
+    } catch (e) { /* ignore parse errors */ }
+  }
+  return userFromApi(row);
 }
