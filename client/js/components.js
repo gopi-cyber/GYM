@@ -810,10 +810,10 @@ export function renderDashboard(user, onNavigate) {
       <p>Logged in as: <span class="role-badge ${badgeClass}">${user.role}</span></p>
     </div>
     <div>
-      <button class="btn-secondary" id="dash-back-home">Back to Homepage</button>
+      <button class="btn-secondary" id="dash-logout">Logout</button>
     </div>
   `;
-  header.querySelector('#dash-back-home').addEventListener('click', () => onNavigate('home'));
+  header.querySelector('#dash-logout').addEventListener('click', () => onSignOut());
   container.appendChild(header);
 
   // Render role specific views
