@@ -14,6 +14,13 @@ pnpm-debug.log*
 server/data/*.db
 server/data/*.db-shm
 server/data/*.db-wal
+server/data/gyms/*.db
+server/data/gyms/*.db-shm
+server/data/gyms/*.db-wal
+
+server/src/data/gyms/*.db
+server/src/data/gyms/*.db-shm
+server/src/data/gyms/*.db-wal
 
 # Temp / adhoc scripts
 C:/Users/chitr/AppData/Local/Temp/hermes-verify-*
@@ -33,7 +40,3 @@ dist/
 *.swp
 *.swo
 *~
-
-server/src/data/gyms/*.db
-server/src/data/gyms/*.db-shm
-server/src/data/gyms/*.db-wal
