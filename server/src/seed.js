@@ -114,3 +114,27 @@ console.log('  Owner:    admin@gms.com / admin123');
 console.log('  Trainer:  trainer@gms.com / trainer123');
 console.log('  Customer: client@gms.com / client123');
 console.log('Company:   demo-gym / Demo Gym');
+
+if (!registry.prepare("SELECT COUNT(*) AS c FROM plans WHERE active = 1").get().c) {
+  [
+    { slug: 'starter', name: 'Starter', price_cents: 2900, interval: 'monthly', active: 1, popular: 0 },
+    { slug: 'growth', name: 'Growth', price_cents: 7900, interval: 'monthly', active: 1, popular: 1 },
+    { slug: 'enterprise', name: 'Enterprise', price_cents: 19900, interval: 'monthly', active: 1, popular: 0 },
+  ].forEach(p => {
+    const id = uuidv4();
+    registry.prepare('INSERT INTO plans (id, slug, name, price_cents, interval, active, popular, features) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, p.slug, p.name, p.price_cents, p.interval, p.active, p.popular, JSON.stringify({ trainers: 1, analytics: true, storage: '5GB' }));
+  });
+  console.log('Seeded subscription plans.');
+}
+
+const planForSeed = registry.prepare('SELECT id, price_cents, name FROM plans WHERE slug = ?').get('starter');
+if (planForSeed && !registry.prepare('SELECT COUNT(*) AS c FROM subscriptions').get().c) {
+  const subId = uuidv4();
+  const invoiceId = uuidv4();
+  const paymentId = uuidv4();
+  const nowISO = new Date().toISOString();
+  registry.prepare('INSERT INTO subscriptions (id, company_id, plan_id, plan_slug, status, started_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(subId, company.id, planForSeed.id, 'starter', 'active', nowISO, nowISO);
+  registry.prepare('INSERT INTO invoices (id, company_id, subscription_id, amount_cents, status, due_date, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(invoiceId, company.id, subId, planForSeed.price_cents, 'paid', nowISO, nowISO);
+  registry.prepare('INSERT INTO payments (id, company_id, subscription_id, invoice_id, amount_cents, currency, status, provider, payment_reference, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(paymentId, company.id, subId, invoiceId, planForSeed.price_cents, 'USD', 'succeeded', 'simulated', 'SIM-SEED', JSON.stringify({ plan_slug: 'starter' }));
+  console.log('Seeded demo subscription/invoice/payment.');
+}
