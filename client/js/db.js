@@ -1,41 +1,32 @@
 // API Client Layer for Gym Management System (GMS)
-// Replaces the old LocalStorage mock DB. Talks to the VigorGMS Express/SQLite
-// backend at API_BASE. Because the existing UI code (components.js) calls
-// db.* functions SYNCHRONOUSLY in many render paths, this module keeps an
-// in-memory cache that is populated by async loaders (initDB/login/register)
-// and exposes synchronous getters that simply read from that cache. Mutating
-// operations (save/delete) are async: they call the API then patch the cache.
+import * as db from './db.js';
 
-const API_BASE = 'http://localhost:4000/api';
+// API_BASE now derives from the current host so the app works when served
+// from any origin without hardcoding localhost.
+const API_BASE = `${location.protocol}//${location.host}/api`;
 
-const STORAGE_KEYS = {
-  TOKEN: 'gms_token',
-  USER: 'gms_user'
-};
+const TOKEN_KEY = 'gms_token';
+const USER_KEY = 'gms_user';
 
-// In-memory cache. Populated by initDB()/login()/register().
 let cache = {
   directory: [],
   users: [],
   inventory: [],
   attendance: [],
-  fitnessPlans: [] // UI-shaped plan objects the current session can see
+  fitnessPlans: [],
+  plans: [],
+  subscription: null,
+  adminStats: null,
+  adminCompanies: [],
 };
 
-// ---------------------------------------------------------------------------
-// Low level helpers
-// ---------------------------------------------------------------------------
-
 function getToken() {
-  return localStorage.getItem(STORAGE_KEYS.TOKEN);
+  return localStorage.getItem(TOKEN_KEY);
 }
 
 function setToken(token) {
-  if (token) {
-    localStorage.setItem(STORAGE_KEYS.TOKEN, token);
-  } else {
-    localStorage.removeItem(STORAGE_KEYS.TOKEN);
-  }
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
 }
 
 async function apiFetch(path, options = {}) {
@@ -44,13 +35,11 @@ async function apiFetch(path, options = {}) {
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-
   let data = null;
   const text = await res.text();
   if (text) {
     try { data = JSON.parse(text); } catch (e) { data = null; }
   }
-
   if (!res.ok) {
     const err = new Error((data && data.error) || `Request failed (${res.status})`);
     err.status = res.status;
@@ -60,11 +49,6 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
-// Roles are lowercase in the DB/API ('owner','trainer','customer'). The UI
-// (components.js) was written against capitalized role strings
-// ('Owner','Trainer','Customer') for both comparisons and display, so we
-// normalize once here: cached/displayed user objects carry a Capitalized
-// role, and toApiRole() lowercases it again whenever we talk to the API.
 function capitalizeRole(role) {
   if (!role) return role;
   return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
@@ -74,9 +58,9 @@ function toApiRole(role) {
   return (role || '').toLowerCase();
 }
 
-// ---------------------------------------------------------------------------
-// Shape adapters: API (snake_case) <-> UI (camelCase, matches old mock shape)
-// ---------------------------------------------------------------------------
+function safeParse(text) {
+  try { return JSON.parse(text || '{}'); } catch { return {}; }
+}
 
 function userFromApi(row) {
   return {
@@ -89,7 +73,8 @@ function userFromApi(row) {
     phone: row.phone || '',
     gymAddress: row.gym_address || '',
     gpsLocation: row.gps_location || '',
-    mobileNumber: row.mobile_number || ''
+    mobileNumber: row.mobile_number || '',
+    isAdmin: !!(row.is_admin || row.isAdmin),
   };
 }
 
@@ -101,7 +86,7 @@ function inventoryFromApi(row) {
     quantity: row.quantity,
     status: row.status,
     threshold: row.threshold === null || row.threshold === undefined ? undefined : row.threshold,
-    lastServiced: row.last_serviced || undefined
+    lastServiced: row.last_serviced || undefined,
   };
 }
 
@@ -112,7 +97,7 @@ function inventoryToApi(item) {
     quantity: item.quantity,
     status: item.status,
     threshold: item.threshold === undefined ? null : item.threshold,
-    last_serviced: item.lastServiced === undefined ? null : item.lastServiced
+    last_serviced: item.lastServiced === undefined ? null : item.lastServiced,
   };
 }
 
@@ -123,7 +108,7 @@ function attendanceFromApi(row) {
     date: row.date,
     checkIn: row.check_in || '',
     checkOut: row.check_out || '',
-    duration: row.duration === null || row.duration === undefined ? 0 : row.duration
+    duration: row.duration === null || row.duration === undefined ? 0 : row.duration,
   };
 }
 
@@ -134,17 +119,99 @@ function planFromApi(row, trainerName) {
     trainerId: row.trainer_id,
     trainerName: trainerName || '',
     workoutPlan: row.workout_plan || [],
-    nutritionPlan: row.nutrition_plan || []
+    nutritionPlan: row.nutrition_plan || [],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Billing / admin client helpers
+// ---------------------------------------------------------------------------
+
+export async function loadPlans() {
+  const rows = await apiFetch('/plans');
+  cache.plans = rows.map(r => ({ ...r, features: safeParse(r.features) }));
+  return cache.plans;
+}
+
+export function getPlans() {
+  return cache.plans;
+}
+
+export async function loadCurrentSubscription() {
+  cache.subscription = await apiFetch('/subscriptions/current').catch(() => null);
+  return cache.subscription;
+}
+
+export function getCurrentSubscription() {
+  return cache.subscription;
+}
+
+export async function checkoutPlan(planSlug) {
+  const row = await apiFetch('/subscriptions/checkout', {
+    method: 'POST',
+    body: JSON.stringify({ plan_slug: planSlug }),
+  });
+  cache.subscription = row || cache.subscription;
+  return row;
+}
+
+export async function cancelSubscription(subscriptionId) {
+  const row = await apiFetch(`/subscriptions/${subscriptionId}/cancel`, { method: 'POST' });
+  cache.subscription = row || cache.subscription;
+  return row;
+}
+
+export async function loadSubscriptionUsage() {
+  return apiFetch('/subscriptions/usage').catch(() => null);
+}
+
+export async function loadAdminStats() {
+  cache.adminStats = await apiFetch('/admin/stats').catch(() => null);
+  return cache.adminStats;
+}
+
+export function getAdminStats() {
+  return cache.adminStats;
+}
+
+export async function loadAdminCompanies() {
+  cache.adminCompanies = await apiFetch('/admin/companies').catch(() => []);
+  return cache.adminCompanies;
+}
+
+export function getAdminCompanies() {
+  return cache.adminCompanies;
+}
+
+export async function createInvoice(payload) {
+  return apiFetch('/admin/invoices', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function payInvoice(invoiceId) {
+  return apiFetch(`/admin/invoices/${invoiceId}/pay`, { method: 'POST' });
+}
+
+export async function loadAdminActions() {
+  return apiFetch('/admin/actions').catch(() => []);
+}
+
+export function isAdminUser() {
+  const u = getCurrentUser();
+  return !!(u && u.isAdmin);
+}
+
+export async function loadPlanDetails(planId) {
+  return apiFetch(`/plans/${planId}`).catch(() => null);
 }
 
 // ---------------------------------------------------------------------------
 // Init / session loading
 // ---------------------------------------------------------------------------
 
-// initDB() is now ASYNC. app.js awaits this before the first navigate().
 export async function initDB() {
-  // Public directory is always fetchable, auth or no auth.
   try {
     cache.directory = await apiFetch('/directory');
   } catch (e) {
@@ -157,39 +224,28 @@ export async function initDB() {
   try {
     const me = await apiFetch('/users/me');
     const user = userFromApi(me);
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
     await loadRoleData(user);
   } catch (e) {
-    // Expired/invalid token - fall back to logged-out state.
     clearCurrentUser();
   }
 }
 
-// Fetches everything the given (already-authenticated) user's role needs,
-// and populates the cache. Called by initDB() on page load and by
-// login()/register() right after obtaining a token.
 async function loadRoleData(user) {
   const apiRole = toApiRole(user.role);
 
-  // Inventory - any authenticated role can view.
   try {
     cache.inventory = (await apiFetch('/inventory')).map(inventoryFromApi);
   } catch (e) {
     cache.inventory = [];
   }
 
-  // Attendance - server scopes rows to "own" unless owner.
   try {
     cache.attendance = (await apiFetch('/attendance')).map(attendanceFromApi);
   } catch (e) {
     cache.attendance = [];
   }
 
-  // User directory listing - owner sees everyone; trainer needs the
-  // customer roster to assign fitness plans (see server/src/routes/users.js
-  // note: requireRole was widened from ('owner') to ('owner','trainer') to
-  // support this - the old frontend's trainer dashboard has no other way to
-  // enumerate clients). Customers only "see" themselves.
   if (apiRole === 'owner' || apiRole === 'trainer') {
     try {
       cache.users = (await apiFetch('/users')).map(userFromApi);
@@ -200,12 +256,6 @@ async function loadRoleData(user) {
     cache.users = [user];
   }
 
-  // Fitness plans - no bulk-list endpoint exists server-side, so we build
-  // the cache appropriate to the role:
-  //  - customer: just their own plan (GET /fitness-plans/me)
-  //  - trainer: loop each customer and fetch GET /fitness-plans/customer/:id
-  //    (404 simply means "no plan yet" for that client - skipped)
-  //  - owner: not used by any current dashboard view, left empty
   cache.fitnessPlans = [];
   if (apiRole === 'customer') {
     try {
@@ -224,7 +274,7 @@ async function loadRoleData(user) {
         const trainer = cache.users.find(u => u.id === row.trainer_id);
         plans.push(planFromApi(row, trainer && trainer.name));
       } catch (e) {
-        // no plan for this customer yet - fine, skip
+        // no plan for this customer yet
       }
     }
     cache.fitnessPlans = plans;
@@ -238,51 +288,57 @@ async function loadRoleData(user) {
 export async function login(email, password) {
   const { token, user } = await apiFetch('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify({ email, password }),
   });
   setToken(token);
   const uiUser = userFromApi(user);
-  localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(uiUser));
+  localStorage.setItem(USER_KEY, JSON.stringify(uiUser));
   await loadRoleData(uiUser);
   return uiUser;
 }
 
-// role should be 'Customer' | 'Trainer' | 'Owner' (server normalizes allowed self-registration roles).
-// companySlug and phone are optional for register; phone is used for owner notifications.
 export async function register({ name, email, password, role, companySlug, phone }) {
   const payload = { name, email, password, role: toApiRole(role) };
   if (companySlug) payload.companySlug = companySlug;
   if (phone) payload.phone = phone;
   const { token, user } = await apiFetch('/auth/register', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
   setToken(token);
   const uiUser = userFromApi(user);
-  localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(uiUser));
+  localStorage.setItem(USER_KEY, JSON.stringify(uiUser));
   await loadRoleData(uiUser);
   return uiUser;
 }
 
 export function getCurrentUser() {
-  const str = localStorage.getItem(STORAGE_KEYS.USER);
+  const str = localStorage.getItem(USER_KEY);
   return str ? JSON.parse(str) : null;
 }
 
-// Kept for backward compatibility with any old call sites; no-op beyond
-// persisting locally, since the source of truth is the JWT + /users/me now.
 export function setCurrentUser(user) {
-  localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export function clearCurrentUser() {
   setToken(null);
-  localStorage.removeItem(STORAGE_KEYS.USER);
-  cache = { directory: cache.directory, users: [], inventory: [], attendance: [], fitnessPlans: [] };
+  localStorage.removeItem(USER_KEY);
+  cache = {
+    directory: cache.directory,
+    users: [],
+    inventory: [],
+    attendance: [],
+    fitnessPlans: [],
+    plans: [],
+    subscription: null,
+    adminStats: null,
+    adminCompanies: [],
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Synchronous cache getters (used throughout components.js render code)
+// Synchronous cache getters used by render code
 // ---------------------------------------------------------------------------
 
 export function getDirectory() { return cache.directory; }
@@ -292,12 +348,9 @@ export function getAttendance() { return cache.attendance; }
 export function getFitnessPlans() { return cache.fitnessPlans; }
 
 // ---------------------------------------------------------------------------
-// Async mutators - call the API, then patch the in-memory cache
+// Async mutators
 // ---------------------------------------------------------------------------
 
-// Directory (owner only on the backend). Not currently wired to any UI
-// control (the old mock frontend never had an "add directory entry" admin
-// form), but implemented here for parity with the mock API surface.
 export async function saveDirectoryItem(item) {
   const row = await apiFetch('/directory', {
     method: 'POST',
@@ -309,16 +362,13 @@ export async function saveDirectoryItem(item) {
       hospital: item.hospital,
       avatar: item.avatar,
       bio: item.bio,
-      linkedUserId: item.linkedUserId
-    })
+      linkedUserId: item.linkedUserId,
+    }),
   });
   cache.directory.push(row);
   return row;
 }
 
-// Legacy no-op-ish helper: user creation now goes through register(). Left
-// in place only so an accidental stray call doesn't throw a hard import
-// error; it does not talk to the server.
 export function saveUser(user) {
   console.warn('db.saveUser() is deprecated - use db.register() instead.');
   return user;
@@ -330,12 +380,12 @@ export async function saveInventory(item) {
   if (existing) {
     row = await apiFetch(`/inventory/${item.id}`, {
       method: 'PUT',
-      body: JSON.stringify(inventoryToApi(item))
+      body: JSON.stringify(inventoryToApi(item)),
     });
   } else {
     row = await apiFetch('/inventory', {
       method: 'POST',
-      body: JSON.stringify(inventoryToApi(item))
+      body: JSON.stringify(inventoryToApi(item)),
     });
   }
   const uiItem = inventoryFromApi(row);
@@ -349,17 +399,10 @@ export async function deleteInventory(itemId) {
   cache.inventory = cache.inventory.filter(i => i.id !== itemId);
 }
 
-// The old mock UI's "front desk QR scanner" toggles a specific member's
-// check-in/check-out by userId - that doesn't map onto the backend's
-// self-service /attendance/checkin and /attendance/checkout endpoints
-// (those always act on req.user, the *authenticated* caller). A minimal
-// owner/trainer-only endpoint, POST /api/attendance/log { userId }, was
-// added to server/src/routes/attendance.js to support this: it toggles
-// open/closed exactly like the old mock logic did.
 export async function logAttendanceScan(userId) {
   const row = await apiFetch('/attendance/log', {
     method: 'POST',
-    body: JSON.stringify({ userId })
+    body: JSON.stringify({ userId }),
   });
   const uiRow = attendanceFromApi(row);
   const idx = cache.attendance.findIndex(a => a.id === uiRow.id);
@@ -367,11 +410,10 @@ export async function logAttendanceScan(userId) {
   return uiRow;
 }
 
-// Kept for API-surface parity with the old mock DB; both now delegate to the
-// same server-backed toggle used by the reception scanner.
 export async function saveAttendance(record) {
   return logAttendanceScan(record.userId);
 }
+
 export async function updateAttendance(record) {
   return logAttendanceScan(record.userId);
 }
@@ -383,8 +425,8 @@ export async function saveFitnessPlan(plan) {
       customerId: plan.customerId,
       trainerId: plan.trainerId,
       workoutPlan: plan.workoutPlan,
-      nutritionPlan: plan.nutritionPlan
-    })
+      nutritionPlan: plan.nutritionPlan,
+    }),
   });
   const trainer = cache.users.find(u => u.id === row.trainer_id);
   const uiPlan = planFromApi(row, (trainer && trainer.name) || plan.trainerName);
@@ -397,7 +439,7 @@ export async function updateProfile(fields) {
   const row = await apiFetch('/users/me', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(fields)
+    body: JSON.stringify(fields),
   });
   const index = cache.users.findIndex(u => u && u.id === row.id);
   if (index !== -1) {
@@ -405,14 +447,13 @@ export async function updateProfile(fields) {
   } else {
     cache.users.push(userFromApi(row));
   }
-
-  const storedStr = localStorage.getItem(STORAGE_KEYS.USER);
+  const storedStr = localStorage.getItem(USER_KEY);
   if (storedStr) {
     try {
       const stored = JSON.parse(storedStr);
       const merged = { ...stored, ...userFromApi(row) };
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(merged));
-    } catch (e) { /* ignore parse errors */ }
+      localStorage.setItem(USER_KEY, JSON.stringify(merged));
+    } catch (e) { /* ignore */ }
   }
   return userFromApi(row);
 }

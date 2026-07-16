@@ -27,6 +27,7 @@ export function renderNavbar(currentUser, onNavigate, onSignOut) {
       </div>
       <nav class="nav-links">
         <span class="nav-link" id="nav-dash" style="color: var(--accent-green);">Dashboard</span>
+        ${db.isAdminUser() ? `<span class="nav-link" id="nav-admin" style="color:#f59e0b;">Admin</span>` : ''}
         <button class="nav-profile-avatar-btn" id="nav-auth-btn" aria-label="Open profile menu">
           <img src="${currentUser.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(currentUser.name || 'User') + '&background=10b981&color=fff'}" alt="${currentUser.name || 'User'}" />
         </button>
@@ -78,6 +79,8 @@ export function renderNavbar(currentUser, onNavigate, onSignOut) {
     header.querySelector('#nav-logo').addEventListener('click', () => onNavigate('dashboard'));
     const dashLink = header.querySelector('#nav-dash');
     if (dashLink) dashLink.addEventListener('click', () => onNavigate('dashboard'));
+    const adminLink = header.querySelector('#nav-admin');
+    if (adminLink) adminLink.addEventListener('click', () => onNavigate('admin'));
 
     const authBtn = header.querySelector('#nav-auth-btn');
     const panel = header.querySelector('#nav-profile-panel');
@@ -257,7 +260,7 @@ export function renderPricing(onNavigate) {
   };
 
   // Initial load
-  loadCards(false);
+  loadPlansFromServer(false);
 
   // Toggle Listener
   const checkbox = section.querySelector('#pricing-billing-checkbox');
@@ -273,7 +276,112 @@ export function renderPricing(onNavigate) {
       labelMonthly.classList.add('active');
       labelYearly.classList.remove('active');
     }
-    loadCards(isYearly);
+    loadPlansFromServer(isYearly);
+  });
+
+  async function loadPlansFromServer(isYearly) {
+    const container = section.querySelector('#pricing-cards-container');
+    try {
+      await db.loadPlans();
+    } catch (e) {
+      container.innerHTML = `<div class="admin-error">Unable to load plans right now.</div>`;
+      return;
+    }
+    const plans = db.getPlans();
+    if (!plans || !plans.length) {
+      container.innerHTML = `<div class="admin-error">No plans available right now.</div>`;
+      return;
+    }
+
+    container.innerHTML = plans.map(plan => {
+      const priceCents = plan.price_cents || 0;
+      const monthly = Math.round(priceCents / 100);
+      const price = isYearly ? Math.round(monthly * 0.8) : monthly;
+      const label = plan.interval === 'yearly' ? 'year' : 'month';
+      const features = (plan.features && plan.features.list) ? plan.features.list : [];
+      return `
+        <div class="pricing-card glass-panel ${plan.popular ? 'popular' : ''}">
+          ${plan.popular ? '<div class="popular-badge">Most Popular</div>' : ''}
+          <div class="plan-name">${escapeHtml(plan.name)}</div>
+          <div class="plan-price">$${price}<span>/ ${label}</span></div>
+          <ul class="plan-features">
+            ${features.map(f => `<li>${ICONS.check} ${escapeHtml(f)}</li>`).join('')}
+          </ul>
+          <button class="btn-primary auth-trigger-btn" style="width: 100%; margin-top: auto;" data-slug="${escapeHtml(plan.slug)}">Choose Plan</button>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.auth-trigger-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const slug = btn.dataset.slug;
+        if (slug) onNavigate('checkout');
+      });
+    });
+  }
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+// Checkout Component
+export function renderCheckoutPage(onNavigate) {
+  const section = document.createElement('div');
+  section.className = 'checkout-page';
+
+  section.innerHTML = `
+    <div class="container">
+      <div class="checkout-card glass-panel">
+        <h2>Choose Your Plan</h2>
+        <p class="checkout-subtitle">Pick a plan to start your VigorGMS subscription. You can upgrade or cancel anytime.</p>
+        <div class="checkout-plans" id="checkout-plans">
+          <div class="admin-loading">Loading plans...</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const plansContainer = section.querySelector('#checkout-plans');
+  const plans = db.getPlans();
+  if (!plans || !plans.length) {
+    plansContainer.innerHTML = `<div class="admin-error">No plans available right now. Please try again.</div>`;
+    return section;
+  }
+
+  plansContainer.innerHTML = plans.map(plan => `
+    <div class="pricing-card glass-panel ${plan.popular ? 'popular' : ''}">
+      ${plan.popular ? '<div class="popular-badge">Most Popular</div>' : ''}
+      <div class="plan-name">${escapeHtml(plan.name)}</div>
+      <div class="plan-price">$${Math.round((plan.price_cents || 0) / 100)}<span>/${plan.interval === 'yearly' ? 'year' : 'month'}</span></div>
+      <ul class="plan-features">
+        ${(plan.features && plan.features.list ? plan.features.list : []).map(f => `<li>${ICONS.check} ${escapeHtml(f)}</li>`).join('')}
+      </ul>
+      <button class="btn-primary checkout-select-btn" data-slug="${escapeHtml(plan.slug)}" style="width:100%;margin-top:auto;">Choose Plan</button>
+    </div>
+  `).join('');
+
+  plansContainer.querySelectorAll('.checkout-select-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const slug = e.currentTarget.dataset.slug;
+      btn.disabled = true;
+      btn.textContent = 'Processing...';
+      try {
+        const sub = await db.checkoutPlan(slug);
+        if (sub) {
+          alert('Subscription activated successfully.');
+          onNavigate('dashboard');
+        }
+      } catch (err) {
+        alert(err.message || 'Checkout failed');
+        btn.disabled = false;
+        btn.textContent = 'Choose Plan';
+      }
+    });
   });
 
   return section;
@@ -1236,6 +1344,7 @@ function renderOwnerView(ownerUser) {
       <button class="dash-tab-btn" id="owner-tab-inventory">Inventory Management</button>
       <button class="dash-tab-btn" id="owner-tab-trainers">Trainers</button>
       <button class="dash-tab-btn" id="owner-tab-customers">Customers</button>
+      <button class="dash-tab-btn" id="owner-tab-billing">Billing</button>
     </div>
 
     <div id="owner-tab-content" style="display: flex; flex-direction: column; gap: 20px;">
@@ -2020,9 +2129,93 @@ function renderOwnerView(ownerUser) {
   div.querySelector('#owner-tab-inventory').addEventListener('click', () => loadOwnerTab('inventory'));
   div.querySelector('#owner-tab-trainers').addEventListener('click', () => loadOwnerTab('trainers'));
   div.querySelector('#owner-tab-customers').addEventListener('click', () => loadOwnerTab('customers'));
+  div.querySelector('#owner-tab-billing').addEventListener('click', () => loadBillingTab());
 
-  return div;
-}
+  async function loadBillingTab() {
+    contentArea.innerHTML = `<div class="admin-loading">Loading billing...</div>`;
+    try {
+      await db.loadPlans();
+      await db.loadCurrentSubscription();
+    } catch (e) {
+      contentArea.innerHTML = `<div class="admin-error">Failed to load billing data.</div>`;
+      return;
+    }
+    const sub = db.getCurrentSubscription();
+    const plans = db.getPlans();
+    const plan = sub && plans ? plans.find(p => p.slug === (sub.metadata && sub.metadata.plan_slug ? sub.metadata.plan_slug : sub.plan_slug)) || plans.find(p => p.id === sub.plan_id) : null;
+
+    contentArea.innerHTML = `
+      <div class="dashboard-tabs">
+        <button class="dash-tab-btn active" id="billing-subscription">Current Plan</button>
+        <button class="dash-tab-btn" id="billing-usage">Usage</button>
+      </div>
+      <div id="billing-tab-content"></div>
+    `;
+
+    const subContent = contentArea.querySelector('#billing-tab-content');
+    const renderSubTab = (tab) => {
+      contentArea.querySelectorAll('.dash-tab-btn').forEach(btn => btn.classList.remove('active'));
+      contentArea.querySelector(`#billing-${tab}`).classList.add('active');
+      if (tab === 'subscription') {
+        subContent.innerHTML = `
+          <div class="glass-panel" style="padding:24px;">
+            <h3 style="margin-bottom:12px;">Current Subscription</h3>
+            ${!sub || !plan ? `<p style="color: var(--text-secondary);">No active subscription found. <button class="btn-primary" id="go-checkout" style="margin-left:8px;">Choose Plan</button></p>` : `
+              <p><strong>Plan:</strong> ${escapeHtml(plan.name)}</p>
+              <p><strong>Status:</strong> <span class="status-badge status-${sub.status || 'trialing'}">${escapeHtml(sub.status || 'trialing')}</span></p>
+              <p><strong>Period:</strong> ${sub.current_period_start || '-'} → ${sub.current_period_end || '-'}</p>
+              <p><strong>Trial ends:</strong> ${sub.trial_end || '-'}</p>
+              <p><strong>Interval:</strong> ${(plan.interval || 'month').toUpperCase()}</p>
+              <p><strong>Price:</strong> $${(plan.price_cents ? Math.round(plan.price_cents / 100) : '-')}/${plan.interval === 'yearly' ? 'year' : 'month'}</p>
+              <div style="margin-top:12px;">
+                <button class="btn-primary" id="go-checkout">Change Plan</button>
+                ${sub ? `<button class="btn-secondary" id="cancel-subscription" style="margin-left:8px;border-color:#ef4444;color:#ef4444;">Cancel Subscription</button>` : ''}
+              </div>
+            `}
+          </div>
+        `;
+        const checkoutBtn = subContent.querySelector('#go-checkout');
+        if (checkoutBtn) checkoutBtn.addEventListener('click', () => onNavigate('checkout'));
+        const cancelBtn = subContent.querySelector('#cancel-subscription');
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', async () => {
+            if (!confirm('Are you sure you want to cancel this subscription?')) return;
+            try {
+              await db.cancelSubscription(sub.id);
+              loadBillingTab();
+            } catch (e) {
+              alert(e.message || 'Failed to cancel subscription.');
+            }
+          });
+        }
+      } else if (tab === 'usage') {
+        contentArea.querySelector('.dash-tab-btn')?.classList.remove('active');
+        contentArea.querySelector('#billing-usage').classList.add('active');
+        subContent.innerHTML = `<div class="admin-loading">Loading usage...</div>`;
+        db.loadSubscriptionUsage().then(data => {
+          if (!data) {
+            subContent.innerHTML = `<div class="admin-error">Could not load usage.</div>`;
+            return;
+          }
+          subContent.innerHTML = `
+            <div class="glass-panel" style="padding:24px;">
+              <h3 style="margin-bottom:12px;">Usage Summary</h3>
+              <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                <div><strong>Inventory items:</strong> ${(data.usage && data.usage.inventory) || 0}</div>
+                <div><strong>Attendance records:</strong> ${(data.usage && data.usage.attendance) || 0}</div>
+                <div><strong>Fitness plans:</strong> ${(data.usage && data.usage.fitness_plans) || 0}</div>
+              </div>
+            </div>
+          `;
+        }).catch(() => {
+          subContent.innerHTML = `<div class="admin-error">Could not load usage.</div>`;
+        });
+      }
+    };
+    renderSubTab('subscription');
+    subContent.querySelector('#billing-subscription')?.addEventListener('click', () => renderSubTab('subscription'));
+    subContent.querySelector('#billing-usage')?.addEventListener('click', () => renderSubTab('usage'));
+  }
 
 // Custom Modal Overlay Prompt
 export function showConfirmModal(title, message, onConfirm) {

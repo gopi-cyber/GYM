@@ -34,4 +34,19 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { signToken, requireAuth, requireRole, JWT_SECRET };
+// Middleware: require elevated admin flag from registry users table
+function requireAdmin(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'No token provided' });
+  if (!req.registryDb) return res.status(500).json({ error: 'Registry not initialized' });
+  try {
+    const row = req.registryDb.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.user.id);
+    if (!row || !row.is_admin) {
+      return res.status(403).json({ error: 'Forbidden: not admin' });
+    }
+    next();
+  } catch (e) {
+    return res.status(500).json({ error: 'Authorization lookup failed' });
+  }
+}
+
+module.exports = { signToken, requireAuth, requireRole, requireAdmin, JWT_SECRET };
