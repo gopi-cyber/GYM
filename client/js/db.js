@@ -207,6 +207,15 @@ export async function loadPlanDetails(planId) {
   return apiFetch(`/plans/${planId}`).catch(() => null);
 }
 
+export async function simulatePayment(planSlug) {
+  const row = await apiFetch('/payments/simulate', {
+    method: 'POST',
+    body: JSON.stringify({ plan_slug: String(planSlug || '') }),
+  });
+  cache.subscription = row && row.subscription ? row.subscription : cache.subscription;
+  return row;
+}
+
 // ---------------------------------------------------------------------------
 // Init / session loading
 // ---------------------------------------------------------------------------

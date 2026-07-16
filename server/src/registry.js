@@ -99,6 +99,24 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_plan ON subscriptions(plan_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_company ON invoices(company_id);
 CREATE INDEX IF NOT EXISTS idx_admin_actions_company ON admin_actions(company_id);
 CREATE INDEX IF NOT EXISTS idx_admin_actions_actor ON admin_actions(actor_user_id);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id),
+  subscription_id TEXT NOT NULL REFERENCES subscriptions(id),
+  invoice_id TEXT REFERENCES invoices(id),
+  amount_cents INTEGER NOT NULL DEFAULT 0,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  status TEXT NOT NULL DEFAULT 'pending',
+  provider TEXT,
+  payment_reference TEXT,
+  metadata TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_payments_company ON payments(company_id);
+CREATE INDEX IF NOT EXISTS idx_payments_subscription ON payments(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
 `);
 
 const cols = db.prepare("PRAGMA table_info(users)").all().map(x => x.name);

@@ -12,6 +12,7 @@ const directoryRoutes = require('./routes/directory');
 const plansRoutes = require('./routes/plans');
 const subscriptionsRoutes = require('./routes/subscriptions');
 const adminRoutes = require('./routes/admin');
+const paymentsRoutes = require('./routes/payments');
 const registry = require('./registry');
 const { forCompany } = require('./gymDb');
 const { requireSubscription } = require('./middleware/subscription');
@@ -53,6 +54,9 @@ app.use('/api/admin', adminRoutes);
 
 // Subscription management routes after authentication.
 app.use('/api/subscriptions', subscriptionsRoutes);
+
+// Simulated payments: owner-billable action.
+app.use('/api/payments', paymentsRoutes);
 
 // Subscription enforcement for company-scoped protected routes.
 app.use('/api', requireSubscription);

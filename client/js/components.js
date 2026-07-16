@@ -2170,6 +2170,7 @@ function renderOwnerView(ownerUser) {
               <div style="margin-top:12px;">
                 <button class="btn-primary" id="go-checkout">Change Plan</button>
                 ${sub ? `<button class="btn-secondary" id="cancel-subscription" style="margin-left:8px;border-color:#ef4444;color:#ef4444;">Cancel Subscription</button>` : ''}
+                ${plan && (sub.status === 'trialing' || sub.status === 'active') ? `<button class="btn-primary" id="simulate-payment" style="margin-left:8px;background:#10b981;">Simulate Payment</button>` : ''}
               </div>
             `}
           </div>
@@ -2185,6 +2186,19 @@ function renderOwnerView(ownerUser) {
               loadBillingTab();
             } catch (e) {
               alert(e.message || 'Failed to cancel subscription.');
+            }
+          });
+        }
+        const paymentBtn = subContent.querySelector('#simulate-payment');
+        if (paymentBtn) {
+          paymentBtn.addEventListener('click', async () => {
+            try {
+              const planSlug = (plan && plan.slug) ? plan.slug : (sub.metadata && sub.metadata.plan_slug) ? sub.metadata.plan_slug : (sub.plan_slug || '');
+              const result = await db.simulatePayment(planSlug);
+              alert(`Payment simulated for ${result && result.invoice ? '$' + Math.round((result.invoice.amount_cents || 0) / 100) : ''}. Subscription is now active.`);
+              loadBillingTab();
+            } catch (e) {
+              alert(e.message || 'Simulated payment failed');
             }
           });
         }
