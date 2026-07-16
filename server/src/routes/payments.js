@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { registry, recordAdminAction } = require('../middleware/subscription');
 const { requireAuth, requireRole } = require('../auth');
+const { sendEmail } = require('../middleware/email');
 
 const router = express.Router();
 
@@ -48,6 +49,14 @@ router.post('/simulate', requireAuth, requireRole('owner'), (req, res) => {
   const payment = registry.prepare('SELECT * FROM payments WHERE id = ?').get(paymentId);
   const updatedSub = registry.prepare('SELECT * FROM subscriptions WHERE id = ?').get(sub.id);
   const updatedInvoice = registry.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
+
+  const ownerEmail = (req.user && req.user.email) || 'owner@example.com';
+  void sendEmail({
+    to: ownerEmail,
+    subject: 'VigorGMS payment confirmation',
+    text: `Payment of ${(amountCents / 100).toFixed(2)} USD succeeded for plan ${plan.name}. Subscription is now active.`,
+    html: `<h1>Payment Confirmed</h1><p>Plan: <b>${plan.name}</b></p><p>Amount: <b>${(amountCents / 100).toFixed(2)} USD</b></p><p>Subscription status: <b>active</b></p>`,
+  }).catch((err) => console.error('[email] async send failed after payment', err));
 
   res.status(201).json({ payment, subscription: updatedSub, invoice: updatedInvoice });
 });

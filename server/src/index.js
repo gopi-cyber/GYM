@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const helmet = require('helmet');
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
