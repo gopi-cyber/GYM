@@ -62,6 +62,16 @@ app.use('/api/payments', paymentsRoutes);
 // Subscription enforcement for company-scoped protected routes.
 app.use('/api', requireSubscription);
 
+// Sensitive endpoints: extra rate limit against brute force and misuse.
+try {
+  const { authLimiter, globalApiLimiter } = require('./middleware/rateLimit');
+  app.use('/api/auth', authLimiter);
+  app.use('/api/payments', authLimiter);
+  app.use('/api', globalApiLimiter);
+} catch (e) {
+  console.warn('Rate limiting middleware disabled:', e.message);
+}
+
 app.use('/api/users', userRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/attendance', attendanceRoutes);
