@@ -33,7 +33,15 @@ app.use('/api/auth', authRoutes);
 // Public routes that must be reachable without a JWT.
 app.use('/api/plans', plansRoutes);
 
-// Resolve company from JWT and attach isolated gym DB to req for protected routes.
+// Admin endpoints: use route-level auth/admin checks, not the shared
+// authenticated company middleware.
+app.use('/api/admin', adminRoutes);
+
+// Payment/subscription endpoints: use route-level role checks.
+app.use('/api/payments', paymentsRoutes);
+app.use('/api/subscriptions', subscriptionsRoutes);
+
+// Attach company context and isolated gym DB for authenticated requests.
 app.use('/api', (req, res, next) => {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
