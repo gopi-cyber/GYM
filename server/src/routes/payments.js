@@ -103,20 +103,25 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       const companyId = session.subscription_data && session.subscription_data.metadata && session.subscription_data.metadata.companyId;
       const planSlug = session.subscription_data && session.subscription_data.metadata && session.subscription_data.metadata.planSlug;
       if (companyId && planSlug) {
-        const existingSub = registry.prepare('SELECT id FROM subscriptions WHERE company_id = ? ORDER BY created_at DESC LIMIT 1').get(companyId);
+        const existingSub = registry.prepare('SELECT id, status FROM subscriptions WHERE company_id = ? ORDER BY created_at DESC LIMIT 1').get(companyId);
         const nowISO = new Date().toISOString();
         const subId = existingSub ? existingSub.id : uuidv4();
 
+        const plan = registry.prepare('SELECT id, name, price_cents, interval, features FROM plans WHERE slug = ? AND active = 1').get(planSlug);
+        const planId = plan ? plan.id : null;
+
         if (!existingSub) {
-          registry.prepare('INSERT INTO subscriptions (id, company_id, status, plan_slug, started_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(subId, companyId, 'active', planSlug, nowISO, nowISO);
+          registry.prepare('INSERT INTO subscriptions (id, company_id, plan_id, plan_slug, status, started_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(subId, companyId, planId, planSlug, 'active', nowISO, nowISO);
         } else {
-          registry.prepare('UPDATE subscriptions SET status = ?, plan_slug = ?, updated_at = ? WHERE id = ?').run('active', planSlug, nowISO, subId);
+          registry.prepare('UPDATE subscriptions SET plan_id = ?, plan_slug = ?, status = ?, updated_at = ? WHERE id = ?').run(planId, planSlug, 'active', nowISO, subId);
         }
 
         const invoiceId = uuidv4();
-        registry.prepare('INSERT INTO invoices (id, company_id, subscription_id, amount_cents, status, due_date, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(invoiceId, companyId, subId, 0, 'paid', nowISO, nowISO);
+        const amountCents = plan ? Number(plan.price_cents) : 0;
+        registry.prepare('INSERT INTO invoices (id, company_id, subscription_id, amount_cents, status, due_date, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(invoiceId, companyId, subId, amountCents, 'paid', nowISO, nowISO);
+
         const paymentId = uuidv4();
-        registry.prepare('INSERT INTO payments (id, company_id, subscription_id, invoice_id, amount_cents, currency, status, provider, payment_reference, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(paymentId, companyId, subId, invoiceId, 0, 'USD', 'succeeded', 'stripe', session.id, JSON.stringify({ event: event.type }));
+        registry.prepare('INSERT INTO payments (id, company_id, subscription_id, invoice_id, amount_cents, currency, status, provider, payment_reference, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(paymentId, companyId, subId, invoiceId, amountCents, 'USD', 'succeeded', 'stripe', session.id, JSON.stringify({ event: event.type }));
         recordAdminAction({ user: { company_id: companyId } }, 'payment.stripe.webhook', 'payment', paymentId, { planSlug, session: session.id });
       }
     }

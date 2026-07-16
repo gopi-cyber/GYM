@@ -17,7 +17,7 @@ const adminRoutes = require('./routes/admin');
 const paymentsRoutes = require('./routes/payments');
 const registry = require('./registry');
 const { forCompany } = require('./gymDb');
-const { requireSubscription } = require('./middleware/subscription');
+const { requireSubscription, requirePlanFeature } = require('./middleware/subscription');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
 
@@ -55,14 +55,18 @@ app.use('/api', (req, res, next) => {
 // Admin endpoints: bypass subscription enforcement but require admin flag.
 app.use('/api/admin', adminRoutes);
 
-// Subscription management routes after authentication.
-app.use('/api/subscriptions', subscriptionsRoutes);
-
-// Simulated payments: owner-billable action.
+// Payment webhook endpoint does not require local user auth; validated via Stripe signature.
 app.use('/api/payments', paymentsRoutes);
 
-// Subscription enforcement for company-scoped protected routes.
-app.use('/api', requireSubscription);
+// Subscription management endpoints still available.
+app.use('/api/subscriptions', subscriptionsRoutes);
+
+// Subscription enforcement after authentication.
+app.use('/api/users', requireSubscription);
+app.use('/api/inventory', requireSubscription);
+app.use('/api/attendance', requireSubscription);
+app.use('/api/fitness-plans', requireSubscription);
+app.use('/api/directory', requireSubscription);
 
 // Sensitive endpoints: extra rate limit against brute force and misuse.
 try {

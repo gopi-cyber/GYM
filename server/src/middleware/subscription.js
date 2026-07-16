@@ -57,9 +57,9 @@ function requireSubscription(req, res, next) {
   const result = ensureCompanyAccess(req.companyId);
   if (!result.allowed) {
     if (result.reason === 'Trial expired' || result.reason === 'Subscription ended') {
-      return res.status(403).json({ error: 'subscription_required', reason: result.reason, checkout_url: `/api/subscriptions/current` });
+      return res.status(403).json({ error: 'subscription_required', reason: result.reason, checkout_url: `/pricing` });
     }
-    return res.status(403).json({ error: 'subscription_required', reason: result.reason });
+    return res.status(403).json({ error: 'subscription_required', reason: result.reason, checkout_url: `/pricing` });
   }
   req.companyStatus = result;
   next();
@@ -79,6 +79,34 @@ function attachSubscriptionContext(req, res, next) {
   next();
 }
 
+function requirePlanFeature(featureKey) {
+  return (req, res, next) => {
+    if (!req.companyId) return res.status(400).json({ error: 'No company scope' });
+    const access = ensureCompanyAccess(req.companyId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'subscription_required', reason: access.reason, checkout_url: `/pricing` });
+    }
+
+    const plan = registry.prepare(
+      `SELECT p.features, s.plan_id
+       FROM subscriptions s
+       JOIN plans p ON p.id = s.plan_id
+       WHERE s.company_id = ?
+       ORDER BY s.created_at DESC
+       LIMIT 1`
+    ).get(req.companyId);
+
+    const features = plan ? JSON.parse(plan.features || '{}') : {};
+    const allowedFeatures = Array.isArray(features.list) ? features.list : [];
+    if (featureKey && !allowedFeatures.includes(featureKey)) {
+      return res.status(403).json({ error: 'feature_not_included', required: featureKey, checkout_url: `/pricing` });
+    }
+
+    req.plan = plan || null;
+    next();
+  };
+}
+
 function recordAdminAction(req, action, targetType, targetId, metadata) {
   try {
     const id = require('uuid').v4();
@@ -90,4 +118,4 @@ function recordAdminAction(req, action, targetType, targetId, metadata) {
   }
 }
 
-module.exports = { registry, ensureCompanyAccess, requireSubscription, attachSubscriptionContext, recordAdminAction };
+module.exports = { registry, ensureCompanyAccess, requireSubscription, attachSubscriptionContext, requirePlanFeature, recordAdminAction };
