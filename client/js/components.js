@@ -371,6 +371,11 @@ export function renderCheckoutPage(onNavigate) {
       btn.disabled = true;
       btn.textContent = 'Processing...';
       try {
+        const checkout = await db.startCheckout(slug);
+        if (checkout && checkout.url) {
+          location.href = checkout.url;
+          return;
+        }
         const sub = await db.checkoutPlan(slug);
         if (sub) {
           alert('Subscription activated successfully.');
