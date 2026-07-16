@@ -80,16 +80,6 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/fitness-plans', fitnessPlanRoutes);
 app.use('/api/directory', directoryRoutes);
 
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`VigorGMS API listening on http://localhost:${PORT}`);
-});
-
 // Serve client static files from `../client`
 const CLIENT_DIR = path.join(__dirname, '..', '..', 'client');
 app.use(express.static(CLIENT_DIR));
@@ -99,6 +89,12 @@ app.get(['/dashboard', '/pricing', '/checkout', '/admin', '/auth', '/'], (req, r
   res.sendFile(path.join(CLIENT_DIR, 'index.html'));
 });
 
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not found' });
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`VigorGMS API listening on http://localhost:${PORT}`);
 });

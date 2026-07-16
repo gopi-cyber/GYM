@@ -1,8 +1,10 @@
 const express = require('express');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { registry, recordAdminAction } = require('../middleware/subscription');
 const { requireAuth, requireRole } = require('../auth');
 const { sendEmail } = require('../middleware/email');
+const { createCheckoutSession } = require('../middleware/stripe');
 
 const router = express.Router();
 
@@ -59,6 +61,70 @@ router.post('/simulate', requireAuth, requireRole('owner'), (req, res) => {
   }).catch((err) => console.error('[email] async send failed after payment', err));
 
   res.status(201).json({ payment, subscription: updatedSub, invoice: updatedInvoice });
+});
+
+// POST /api/payments/checkout { plan_slug }
+router.post('/checkout', requireAuth, requireRole('owner'), async (req, res) => {
+  try {
+    const { plan_slug } = req.body || {};
+    const origin = (req.headers.origin || `${req.protocol}://${req.headers.host}`).replace(/\/$/, '');
+    const session = await createCheckoutSession({
+      companyId: req.user.company_id,
+      planSlug: plan_slug,
+      origin,
+      email: req.user.email,
+    });
+    res.status(200).json({ url: session.url, id: session.id });
+  } catch (err) {
+    console.error('[payments] checkout failed', err);
+    res.status(400).json({ error: err.message || 'Checkout failed' });
+  }
+});
+
+// POST /api/payments/webhook
+// Verifies Stripe webhooks and persists subscription/invoice/events.
+router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) return res.status(501).json({ error: 'Webhook secret not configured. Set STRIPE_WEBHOOK_SECRET.' });
+  const signature = req.headers['stripe-signature'];
+  if (!signature) return res.status(400).json({ error: 'Missing stripe-signature' });
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, signature, secret);
+  } catch (err) {
+    console.error('[payments] webhook verify failed', err);
+    return res.status(400).json({ error: 'Invalid webhook signature' });
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const companyId = session.subscription_data && session.subscription_data.metadata && session.subscription_data.metadata.companyId;
+      const planSlug = session.subscription_data && session.subscription_data.metadata && session.subscription_data.metadata.planSlug;
+      if (companyId && planSlug) {
+        const existingSub = registry.prepare('SELECT id FROM subscriptions WHERE company_id = ? ORDER BY created_at DESC LIMIT 1').get(companyId);
+        const nowISO = new Date().toISOString();
+        const subId = existingSub ? existingSub.id : uuidv4();
+
+        if (!existingSub) {
+          registry.prepare('INSERT INTO subscriptions (id, company_id, status, plan_slug, started_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(subId, companyId, 'active', planSlug, nowISO, nowISO);
+        } else {
+          registry.prepare('UPDATE subscriptions SET status = ?, plan_slug = ?, updated_at = ? WHERE id = ?').run('active', planSlug, nowISO, subId);
+        }
+
+        const invoiceId = uuidv4();
+        registry.prepare('INSERT INTO invoices (id, company_id, subscription_id, amount_cents, status, due_date, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(invoiceId, companyId, subId, 0, 'paid', nowISO, nowISO);
+        const paymentId = uuidv4();
+        registry.prepare('INSERT INTO payments (id, company_id, subscription_id, invoice_id, amount_cents, currency, status, provider, payment_reference, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(paymentId, companyId, subId, invoiceId, 0, 'USD', 'succeeded', 'stripe', session.id, JSON.stringify({ event: event.type }));
+        recordAdminAction({ user: { company_id: companyId } }, 'payment.stripe.webhook', 'payment', paymentId, { planSlug, session: session.id });
+      }
+    }
+  } catch (err) {
+    console.error('[payments] webhook processing failed', err);
+  }
+
+  res.status(200).json({ received: true });
 });
 
 module.exports = router;
