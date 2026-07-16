@@ -56,6 +56,7 @@ app.use('/api', (req, res, next) => {
     req.gymDb = forCompany(req.companyId, payload.gym_db_path);
     next();
   } catch (e) {
+    console.error('[AUTH] token verify failed', e && e.message, 'prefix=', String(token).slice(0,20), 'path=', req.path);
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 });

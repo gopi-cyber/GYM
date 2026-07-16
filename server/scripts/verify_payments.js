@@ -1,7 +1,8 @@
+
+process.removeAllListeners('warning');
 const jwt = require('jsonwebtoken');
 const http = require('http');
 const path = require('path');
-
 const BASE = 'http://localhost:4000';
 const SECRET = 'dev_secret';
 const PAYLOAD = {
@@ -11,66 +12,32 @@ const PAYLOAD = {
   company_id: 'f3780984-6096-4f85-a57e-75a1fbc902db',
   gym_db_path: path.resolve('data/gyms/demo-gym.db')
 };
-
-function call(method, reqPath, body) {
-  const data = body ? JSON.stringify(body) : null;
-  const headers = { 'Content-Type': 'application/json' };
-  if (method === 'GET' || method === 'POST' || method === 'PUT' || method === 'DELETE') {
-    headers['Authorization'] = 'Bearer ' + jwt.sign(PAYLOAD, SECRET, { expiresIn: '7d' });
-  }
+const token = jwt.sign(PAYLOAD, SECRET, { expiresIn: '7d' });
+function authRequest(method, reqPath, body) {
   return new Promise((resolve, reject) => {
+    const data = body ? JSON.stringify(body) : null;
+    const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
     const req = http.request(BASE + reqPath, { method, headers }, res => {
       let raw = '';
       res.on('data', c => raw += c);
-      res.on('end', () => {
-        try { resolve({ status: res.status, body: raw ? JSON.parse(raw) : null }); }
-        catch (e) { resolve({ status: res.status, body: raw }); }
-      });
+      res.on('end', () => resolve({ status: res.status, body: raw }));
     });
     req.on('error', reject);
     if (data) req.write(data);
     req.end();
   });
 }
-
 (async () => {
-  const l = await call('POST', '/api/auth/login', { email: 'admin@gms.com', password: 'admin123' });
-  const t = l.body?.token;
-  if (!t) {
-    console.log('FAIL login', l.status, l.body?.error);
-    process.exit(1);
-  }
-
-  function authCall(m, p, b) {
-    const data = b ? JSON.stringify(b) : null;
-    const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t };
-    return new Promise((resolve, reject) => {
-      const req = http.request(BASE + p, { method: m, headers }, res => {
-        let raw = '';
-        res.on('data', c => raw += c);
-        res.on('end', () => {
-          try { resolve({ status: res.status, body: raw ? JSON.parse(raw) : null }); }
-          catch (e) { resolve({ status: res.status, body: raw }); }
-        });
-      });
-      req.on('error', reject);
-      if (data) req.write(data);
-      req.end();
-    });
-  }
-
-  const plans = await authCall('GET', '/api/plans');
-  console.log('plans', plans.status, Array.isArray(plans.body) ? plans.body.map(x => x.slug) : plans.body?.error);
-
-  const checkout = await authCall('POST', '/api/payments/checkout', { plan_slug: 'starter' });
-  console.log('checkout', checkout.status, checkout.body?.simulated === true ? 'simulated' : 'stripe', checkout.body?.error || checkout.body?.status || (checkout.body?.url ? 'url_ok' : ''));
-
-  const sub = await authCall('GET', '/api/subscriptions/current');
-  console.log('subscription', sub.status, sub.body?.status || sub.body?.error);
-
-  const inv = await authCall('GET', '/api/inventory');
-  console.log('inventory', inv.status, Array.isArray(inv.body) ? inv.body.length + ' rows' : 'blocked', Array.isArray(inv.body) ? '' : (inv.body?.error || inv.body));
-
-  const invoices = await authCall('GET', '/api/admin/invoices?limit=2&offset=0');
-  console.log('admin invoices', invoices.status, Array.isArray(invoices.body) ? invoices.body.length + ' rows' : 'err', Array.isArray(invoices.body) ? invoices.body[0]?.plan_name || invoices.body[0]?.plan_slug || '-' : (invoices.body?.error || invoices.body));
-})().catch(e => console.error('run_err', e));
+  const hello = await new Promise((resolve) => http.get(BASE + '/api/health', res => { let r=''; res.on('data', c=>r+=c); res.on('end',()=>resolve(r)); }));
+  console.log('health='+hello);
+  const r1 = await authRequest('GET', '/api/plans');
+  console.log('plans=' + r1.status + '|' + r1.body.slice(0, 80));
+  const r2 = await authRequest('POST', '/api/payments/checkout', { plan_slug: 'starter' });
+  console.log('checkout=' + r2.status + '|' + r2.body.slice(0, 80));
+  const r3 = await authRequest('GET', '/api/subscriptions/current');
+  console.log('subscription=' + r3.status + '|' + r3.body.slice(0, 80));
+  const r4 = await authRequest('GET', '/api/inventory');
+  console.log('inventory=' + r4.status + '|' + r4.body.slice(0, 80));
+  const r5 = await authRequest('GET', '/api/admin/stats');
+  console.log('admin=' + r5.status + '|' + r5.body.slice(0, 80));
+})().catch(ex => console.error('fatal=' + ex.message));
