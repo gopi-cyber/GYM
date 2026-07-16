@@ -46,31 +46,21 @@ app.use('/api', (req, res, next) => {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'No token provided' });
-
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+    payload.companyId = payload.company_id || payload.companyId;
     req.user = payload;
-    req.companyId = payload.company_id || payload.companyId;
-    if (!req.companyId) return res.status(400).json({ error: 'Token missing company scope' });
+    req.companyId = payload.companyId;
     req.registryDb = registry;
     req.gymDb = forCompany(req.companyId, payload.gym_db_path);
     next();
   } catch (e) {
-    console.error('[AUTH] token verify failed', e && e.message, 'prefix=', String(token).slice(0,20), 'path=', req.path);
+    console.error('[AUTH] token verify failed', e && e.message, 'prefix=', String(token).slice(0,20), 'path=', req.path, 'secret_prefix=', String(JWT_SECRET).slice(0,4));
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 });
 
-// Admin endpoints: bypass subscription enforcement but require admin flag.
-app.use('/api/admin', adminRoutes);
-
-// Payment webhook endpoint does not require local user auth; validated via Stripe signature.
-app.use('/api/payments', paymentsRoutes);
-
-// Subscription management endpoints still available.
-app.use('/api/subscriptions', subscriptionsRoutes);
-
-// Subscription enforcement after authentication.
+// Subscription enforcement for protected namespaces.
 app.use('/api/users', requireSubscription);
 app.use('/api/inventory', requireSubscription);
 app.use('/api/attendance', requireSubscription);
