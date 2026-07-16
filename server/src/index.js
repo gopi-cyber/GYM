@@ -26,6 +26,9 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'VigorGMS
 
 app.use('/api/auth', authRoutes);
 
+// Public routes that must be reachable without a JWT.
+app.use('/api/plans', plansRoutes);
+
 // Resolve company from JWT and attach isolated gym DB to req for protected routes.
 app.use('/api', (req, res, next) => {
   const header = req.headers.authorization || '';
@@ -48,8 +51,7 @@ app.use('/api', (req, res, next) => {
 // Admin endpoints: bypass subscription enforcement but require admin flag.
 app.use('/api/admin', adminRoutes);
 
-// Plans/subscriptions: enrollment endpoints without subscription wall.
-app.use('/api/plans', plansRoutes);
+// Subscription management routes after authentication.
 app.use('/api/subscriptions', subscriptionsRoutes);
 
 // Subscription enforcement for company-scoped protected routes.
