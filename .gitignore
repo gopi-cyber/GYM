@@ -40,3 +40,14 @@ dist/
 *.swp
 *.swo
 *~
+*.a
+*.db-shm
+*.db-wal
+*.node
+.cache
+.env.*.local
+.env.local
+.npm
+.venv
+__pycache__
+node_modules
