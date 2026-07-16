@@ -49,17 +49,31 @@ router.put('/companies/:id/status', requireAuth, requireAdmin, (req, res) => {
   res.json(registry.prepare('SELECT id, name, slug, status FROM companies WHERE id = ?').get(companyId));
 });
 
-// GET /api/admin/invoices
+// GET /api/admin/invoices?limit=&offset=
 router.get('/invoices', requireAuth, requireAdmin, (req, res) => {
-  const rows = registry.prepare(`
-    SELECT i.*, c.slug AS company_slug, p.slug AS plan_slug
+  const limit = Math.min(Math.max(Number(req.query.limit || 0) || 0, 0), 200);
+  const offset = Math.max(Number(req.query.offset || 0) || 0, 0);
+  let sql = `
+    SELECT i.*, c.slug AS company_slug, p.slug AS plan_slug, p.name AS plan_name
     FROM invoices i
     JOIN companies c ON c.id = i.company_id
     LEFT JOIN subscriptions s ON s.id = i.subscription_id
     LEFT JOIN plans p ON p.id = s.plan_id
     ORDER BY i.created_at DESC
-  `).all();
+  `;
+  const params = [];
+  if (limit > 0) {
+    sql += ' LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+  }
+  const rows = registry.prepare(sql).all(...params);
   res.json(rows.map(r => ({ ...r, metadata: safeParse(r.metadata) })));
+});
+
+// GET /api/admin/invoices/count
+router.get('/invoices/count', requireAuth, requireAdmin, (req, res) => {
+  const row = registry.prepare('SELECT COUNT(*) AS count FROM invoices').get();
+  res.json([{ count: Number(row ? row.count : 0) }]);
 });
 
 // POST /api/admin/invoices { company_id, subscription_id, amount_cents, due_date }

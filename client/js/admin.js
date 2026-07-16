@@ -141,56 +141,124 @@ async function renderCompaniesTab(container, navigate) {
   }
 }
 
-async function renderInvoicesTab(container) {
-  container.innerHTML = `<div class="admin-loading">Loading invoices...</div>`;
-  try {
-    const invoices = await db.loadAdminActions ? [] : [];
-    const raw = await fetch(`${location.protocol}//${location.host}/api/admin/invoices`, {
-      headers: getAuthHeader(),
-    }).then(r => {
-      if (!r.ok) throw new Error('Failed');
-      return r.json();
-    }).catch(() => []);
+async function fetchPageClients(path, options = {}) {
+  const token = db.getToken ? db.getToken() : null;
+  if (!token) throw new Error('Not authenticated');
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    ...(options.headers || {}),
+  };
+  const res = await fetch(`${location.protocol}//${location.host}${path}`, { ...options, headers });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
+  return Array.isArray(data) ? data : [];
+}
 
-    const rows = (raw || []).map(inv => `
+function renderInvoicesTab(container) {
+  const pageSize = 10;
+  let page = 0;
+  let invoices = [];
+  let loading = false;
+  let error = null;
+
+  container.innerHTML = `
+    <div class="admin-header"><h2>Invoices</h2></div>
+    <div id="admin-invoicing-state" class="admin-loading">Loading invoices...</div>
+    <div id="invoice-pager" class="pager"></div>
+  `;
+
+  const stateEl = container.querySelector('#admin-invoicing-state');
+  const pagerEl = container.querySelector('#invoice-pager');
+
+  async function load(pageNum) {
+    if (loading) return;
+    loading = true;
+    error = null;
+    if (stateEl) stateEl.className = 'admin-loading';
+    if (stateEl) stateEl.textContent = 'Loading invoices...';
+    page = pageNum || 0;
+    try {
+      const start = page * pageSize;
+      const rowsPromise = fetchPageClients(`/api/admin/invoices?limit=${pageSize}&offset=${start}`);
+      const countPromise = fetchPageClients(`/api/admin/invoices/count`).then(arr => Array.isArray(arr) && arr[0] && typeof arr[0].count === 'number' ? arr[0].count : arr.length);
+      invoices = await rowsPromise;
+      const total = await countPromise;
+
+      renderTable(stateEl, pagerEl, invoices, total);
+    } catch (e) {
+      error = e;
+      if (stateEl) {
+        stateEl.className = 'admin-error';
+        stateEl.textContent = `Failed to load invoices: ${e.message}`;
+      }
+      if (pagerEl) pagerEl.innerHTML = '';
+    } finally {
+      loading = false;
+    }
+  }
+
+  function renderTable(stateEl, pagerEl, invoices, total) {
+    if (!Array.isArray(invoices) || !invoices.length) {
+      if (stateEl) { stateEl.className = 'admin-error'; stateEl.textContent = 'No invoices yet.'; }
+      if (pagerEl) pagerEl.innerHTML = '';
+      return;
+    }
+
+    const rows = invoices.map(inv => `
       <tr>
         <td>${escapeHtml(inv.id)}</td>
         <td>${escapeHtml(inv.company_slug || '-')}</td>
-        <td>${escapeHtml(inv.plan_slug || '-')}</td>
-        <td>${(inv.amount_cents / 100).toFixed(2)}</td>
-        <td><span class="status-badge status-${inv.status}">${escapeHtml(inv.status)}</span></td>
-        <td>${inv.due_date || '-'}</td>
-        <td>${inv.paid_at || '-'}</td>
+        <td>${escapeHtml(inv.plan_name || inv.plan_slug || '-')}</td>
+        <td>${((inv.amount_cents || 0) / 100).toFixed(2)}</td>
+        <td><span class="status-badge status-${escapeHtml(inv.status || 'unknown')}">${escapeHtml(inv.status || 'unknown')}</span></td>
+        <td>${escapeHtml(inv.due_date || '-')}</td>
+        <td>${escapeHtml(inv.paid_at || '-')}</td>
         <td>
-          ${inv.status !== 'paid' ? `<button class="btn-sm btn-pay" data-id="${inv.id}">Mark Paid</button>` : ''}
+          ${inv.status !== 'paid' ? `<button class="btn-sm btn-pay" data-id="${escapeHtml(inv.id)}">Mark Paid</button>` : ''}
         </td>
       </tr>
     `).join('');
 
-    container.innerHTML = `
-      <div class="admin-header"><h2>Invoices</h2></div>
-      <div class="table-wrap">
-        <table class="admin-table">
-          <thead><tr><th>ID</th><th>Company</th><th>Plan</th><th>Amount</th><th>Status</th><th>Due</th><th>Paid At</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="8">No invoices</td></tr>'}</tbody>
-        </table>
-      </div>
+    tableWrap = document.createElement('div');
+    tableWrap.className = 'table-wrap';
+    tableWrap.innerHTML = `
+      <table class="admin-table">
+        <thead><tr><th>ID</th><th>Company</th><th>Plan</th><th>Amount</th><th>Status</th><th>Due</th><th>Paid At</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="8">No invoices</td></tr>'}</tbody>
+      </table>
     `;
+    if (stateEl) { stateEl.className = ''; stateEl.innerHTML = ''; stateEl.appendChild(tableWrap); }
 
-    container.querySelectorAll('button[data-id]').forEach(btn => {
+    const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize));
+    const pageNum = Math.min(page + 1, totalPages);
+    if (pagerEl) {
+      pagerEl.innerHTML = `
+        <button class="btn-sm" id="invoice-prev" ${page <= 0 ? 'disabled' : ''}>Prev</button>
+        <span>${pageNum} / ${totalPages}</span>
+        <button class="btn-sm" id="invoice-next" ${page + 1 >= totalPages ? 'disabled' : ''}>Next</button>
+      `;
+
+      const prevBtn = pagerEl.querySelector('#invoice-prev');
+      const nextBtn = pagerEl.querySelector('#invoice-next');
+      if (prevBtn) prevBtn.onclick = () => load(page - 1);
+      if (nextBtn) nextBtn.onclick = () => load(page + 1);
+    }
+
+    tableWrap.querySelectorAll('button[data-id]').forEach(btn => {
       btn.onclick = async () => {
-        const id = btn.dataset.id;
         try {
-          await db.payInvoice(id);
-          renderInvoicesTab(container);
+          await db.payInvoice(btn.dataset.id);
+          load(page);
         } catch (e) {
           alert(e.message);
         }
       };
     });
-  } catch (e) {
-    container.innerHTML = `<div class="admin-error">Failed to load invoices: ${e.message}</div>`;
   }
+
+  load(0);
 }
 
 async function renderActionsTab(container) {
