@@ -23,6 +23,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(helmet({ crossOriginEmbedderPolicy: false }));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'VigorGMS API' }));
 
